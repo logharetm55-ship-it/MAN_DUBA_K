@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    direction: rtl;
+    font-family: 'Cairo', sans-serif;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-semibold 
+           px-6 py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg 
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply bg-white hover:bg-gray-50 text-gray-700 font-semibold 
+           px-6 py-3 rounded-xl border border-gray-200 transition-all duration-200 
+           shadow-sm hover:shadow-md disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply bg-red-500 hover:bg-red-600 text-white font-semibold 
+           px-6 py-3 rounded-xl transition-all duration-200;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-6;
+  }
+
+  .input {
+    @apply w-full px-4 py-3 rounded-xl border border-gray-200 
+           focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent
+           transition-all duration-200 bg-white text-right;
+  }
+
+  .badge-pending {
+    @apply bg-yellow-100 text-yellow-700 text-xs font-bold px-2 py-1 rounded-full;
+  }
+
+  .badge-accepted {
+    @apply bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full;
+  }
+
+  .badge-delivered {
+    @apply bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full;
+  }
+
+  .badge-cancelled {
+    @apply bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded-full;
+  }
+
+  .live-indicator {
+    @apply inline-flex items-center gap-1.5 bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Order card animation */
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.order-card-enter {
+  animation: slideInFromTop 0.3s ease-out;
+}
+
+/* Pulse dot for live indicator */
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.pulse-dot {
+  animation: pulseDot 1s ease-in-out infinite;
+}

@@ -1,0 +1,240 @@
+// =============================================================
+// مندوبك - Prisma Schema
+// =============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// =====================
+// Users (Clerk-synced)
+// =====================
+model User {
+  id          String   @id @default(cuid())
+  clerkId     String   @unique @map("clerk_id")
+  email       String?  @unique
+  phone       String?  @unique
+  role        UserRole @default(CLIENT)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  courier     Courier?
+  customer    Customer?
+  orders      Order[]  @relation("ClientOrders")
+
+  @@map("users")
+}
+
+enum UserRole {
+  CLIENT
+  COURIER
+  ADMIN
+}
+
+// =====================
+// Couriers (المناديب)
+// =====================
+model Courier {
+  id              String        @id @default(cuid())
+  userId          String        @unique @map("user_id")
+  name            String
+  phone           String        @unique
+  address         String
+  idFrontImageUrl String        @map("id_front_image_url")
+  idBackImageUrl  String        @map("id_back_image_url")
+  status          CourierStatus @default(PENDING_REVIEW)
+  rating          Float         @default(0.0)
+  totalDeliveries Int           @default(0) @map("total_deliveries")
+  isOnline        Boolean       @default(false) @map("is_online")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders          Order[]       @relation("CourierOrders")
+  ratings         CourierRating[]
+
+  @@map("couriers")
+}
+
+enum CourierStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+// =====================
+// Customers (العملاء)
+// =====================
+model Customer {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  name      String
+  phone     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addresses Address[]
+  orders    Order[]
+
+  @@map("customers")
+}
+
+// =====================
+// Addresses (العناوين)
+// =====================
+model Address {
+  id         String   @id @default(cuid())
+  customerId String   @map("customer_id")
+  label      String
+  street     String
+  city       String
+  district   String?
+  latitude   Float
+  longitude  Float
+  isDefault  Boolean  @default(false) @map("is_default")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  ordersFrom Order[]  @relation("PickupAddress")
+  ordersTo   Order[]  @relation("DeliveryAddress")
+
+  @@map("addresses")
+}
+
+// =====================
+// Orders (الأوردرات)
+// =====================
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique @map("order_number")
+  clientId        String      @map("client_id")
+  courierId       String?     @map("courier_id")
+  customerId      String?     @map("customer_id")
+  type            OrderType
+  status          OrderStatus @default(PENDING)
+  pickupAddressId String?     @map("pickup_address_id")
+  deliveryAddressId String?   @map("delivery_address_id")
+  pickupDetails   String?     @map("pickup_details")
+  deliveryDetails String?     @map("delivery_details")
+  pickupLat       Float?      @map("pickup_lat")
+  pickupLng       Float?      @map("pickup_lng")
+  deliveryLat     Float?      @map("delivery_lat")
+  deliveryLng     Float?      @map("delivery_lng")
+  distanceKm      Float?      @map("distance_km")
+  deliveryFee     Float       @map("delivery_fee")
+  notes           String?
+  acceptedAt      DateTime?   @map("accepted_at")
+  completedAt     DateTime?   @map("completed_at")
+  cancelledAt     DateTime?   @map("cancelled_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  client          User        @relation("ClientOrders", fields: [clientId], references: [id])
+  courier         Courier?    @relation("CourierOrders", fields: [courierId], references: [id])
+  customer        Customer?   @relation(fields: [customerId], references: [id])
+  pickupAddress   Address?    @relation("PickupAddress", fields: [pickupAddressId], references: [id])
+  deliveryAddress Address?    @relation("DeliveryAddress", fields: [deliveryAddressId], references: [id])
+  items           OrderItem[]
+  adOffer         AdOffer?    @relation(fields: [adOfferId], references: [id])
+  adOfferId       String?     @map("ad_offer_id")
+
+  @@map("orders")
+}
+
+enum OrderType {
+  SHOPPING     // مشتريات
+  DELIVERY     // توصيل من A لـ B
+}
+
+enum OrderStatus {
+  PENDING      // منتظر مندوب
+  ACCEPTED     // اتحجز من مندوب
+  PICKED_UP    // المندوب اخده
+  DELIVERED    // وصل
+  CANCELLED    // اتلغى
+}
+
+// =====================
+// Order Items (منتجات الأوردر)
+// =====================
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String  @map("order_id")
+  name        String
+  description String?
+  quantity    Int     @default(1)
+  price       Float?
+  shopName    String? @map("shop_name")
+  shopAddress String? @map("shop_address")
+  imageUrl    String? @map("image_url")
+
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_items")
+}
+
+// =====================
+// Admin Pricing (التسعير)
+// =====================
+model AdminPricing {
+  id             String   @id @default(cuid())
+  zone           String   @unique
+  pricePerKm     Float    @map("price_per_km")
+  minimumFee     Float    @map("minimum_fee")
+  maximumFee     Float?   @map("maximum_fee")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("admin_pricing")
+}
+
+// =====================
+// Ads & Offers (العروض)
+// =====================
+model AdOffer {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  imageUrl     String    @map("image_url")
+  shopName     String    @map("shop_name")
+  shopAddress  String    @map("shop_address")
+  shopLat      Float     @map("shop_lat")
+  shopLng      Float     @map("shop_lng")
+  productName  String    @map("product_name")
+  productPrice Float?    @map("product_price")
+  isActive     Boolean   @default(true) @map("is_active")
+  clickCount   Int       @default(0) @map("click_count")
+  startDate    DateTime  @map("start_date")
+  endDate      DateTime  @map("end_date")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  orders       Order[]
+
+  @@map("ad_offers")
+}
+
+// =====================
+// Courier Ratings (التقييمات)
+// =====================
+model CourierRating {
+  id        String   @id @default(cuid())
+  courierId String   @map("courier_id")
+  orderId   String   @unique @map("order_id")
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+
+  @@map("courier_ratings")
+}
