@@ -1,0 +1,1 @@
+- [Mandoubak project state](mandoubak-state.md) — complete delivery platform, all pages built, Demo Mode (no Clerk keys needed), Arabic RTL UI
