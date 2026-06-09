@@ -39,7 +39,7 @@ export default function TrackOrder() {
   // Simulate order progress for demo
   useEffect(() => {
     if (!autoProgress) return
-    const timers: NodeJS.Timeout[] = []
+    const timers: ReturnType<typeof setTimeout>[] = []
 
     timers.push(setTimeout(() => {
       setCurrentStatus('PICKED_UP')

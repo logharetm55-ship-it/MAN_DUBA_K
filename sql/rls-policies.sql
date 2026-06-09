@@ -1,5 +1,5 @@
 -- =============================================================
--- مندوبك - Supabase RLS Policies
+-- مندوبك - Supabase RLS Policies + Security Functions
 -- انسخ الكود ده وشغله في Supabase SQL Editor
 -- =============================================================
 
@@ -46,7 +46,17 @@ CREATE POLICY "users_select_own" ON users
 
 DROP POLICY IF EXISTS "users_update_own" ON users;
 CREATE POLICY "users_update_own" ON users
-  FOR UPDATE USING (clerk_id = auth.uid()::text);
+  FOR UPDATE USING (clerk_id = auth.uid()::text)
+  WITH CHECK (
+    -- منع اليوزر من ترقية نفسه لأدمن
+    role = (SELECT role FROM users WHERE id = get_current_user_id())
+    OR get_user_role() = 'ADMIN'
+  );
+
+-- الأدمن بس يعدل roles
+DROP POLICY IF EXISTS "users_admin_update" ON users;
+CREATE POLICY "users_admin_update" ON users
+  FOR UPDATE USING (get_user_role() = 'ADMIN');
 
 -- =============================================================
 -- جدول couriers
@@ -56,6 +66,12 @@ CREATE POLICY "couriers_select" ON couriers
   FOR SELECT USING (
     user_id = get_current_user_id()
     OR get_user_role() = 'ADMIN'
+    -- العملاء يشوفوا بيانات المندوب لما يكون على أوردرهم
+    OR id IN (
+      SELECT courier_id FROM orders
+      WHERE client_id = get_current_user_id()
+        AND status IN ('ACCEPTED', 'PICKED_UP')
+    )
   );
 
 DROP POLICY IF EXISTS "couriers_insert_own" ON couriers;
@@ -115,6 +131,14 @@ CREATE POLICY "addresses_update_own" ON addresses
     )
   );
 
+DROP POLICY IF EXISTS "addresses_delete_own" ON addresses;
+CREATE POLICY "addresses_delete_own" ON addresses
+  FOR DELETE USING (
+    customer_id IN (
+      SELECT id FROM customers WHERE user_id = get_current_user_id()
+    )
+  );
+
 -- =============================================================
 -- جدول orders - القلب النووي للأمان
 -- =============================================================
@@ -143,15 +167,17 @@ DROP POLICY IF EXISTS "orders_insert_client" ON orders;
 CREATE POLICY "orders_insert_client" ON orders
   FOR INSERT WITH CHECK (
     client_id = get_current_user_id()
-    AND get_user_role() IN ('CLIENT', 'ADMIN')
+    AND get_user_role() = 'CLIENT'
   );
 
--- العميل يلغي أوردره، المندوب يحدث status، الأدمن بالكل
+-- العميل يلغي أوردره (PENDING بس)، المندوب يحدث status أوردراته، الأدمن بالكل
 DROP POLICY IF EXISTS "orders_update" ON orders;
 CREATE POLICY "orders_update" ON orders
   FOR UPDATE USING (
-    client_id = get_current_user_id()
-    OR courier_id = get_current_courier_id()
+    -- العميل يلغي أوردره لو لسه PENDING
+    (client_id = get_current_user_id() AND status = 'PENDING')
+    -- المندوب يعدل أوردراته هو بس
+    OR (courier_id = get_current_courier_id() AND get_user_role() = 'COURIER')
     OR get_user_role() = 'ADMIN'
   );
 
@@ -177,6 +203,11 @@ CREATE POLICY "order_items_insert" ON order_items
     )
   );
 
+-- منع حذف items بعد إنشاء الأوردر (الأدمن بس)
+DROP POLICY IF EXISTS "order_items_delete_admin" ON order_items;
+CREATE POLICY "order_items_delete_admin" ON order_items
+  FOR DELETE USING (get_user_role() = 'ADMIN');
+
 -- =============================================================
 -- جدول admin_pricing - الأسعار
 -- =============================================================
@@ -195,7 +226,7 @@ CREATE POLICY "pricing_admin_write" ON admin_pricing
 DROP POLICY IF EXISTS "ads_select_active" ON ad_offers;
 CREATE POLICY "ads_select_active" ON ad_offers
   FOR SELECT USING (
-    is_active = true
+    (is_active = true AND end_date > NOW())
     OR get_user_role() = 'ADMIN'
   );
 
@@ -211,25 +242,45 @@ CREATE POLICY "ratings_select" ON courier_ratings
   FOR SELECT USING (
     courier_id = get_current_courier_id()
     OR get_user_role() = 'ADMIN'
+    -- العميل يشوف تقييماته هو
+    OR order_id IN (
+      SELECT id FROM orders WHERE client_id = get_current_user_id()
+    )
   );
 
 DROP POLICY IF EXISTS "ratings_insert_client" ON courier_ratings;
 CREATE POLICY "ratings_insert_client" ON courier_ratings
   FOR INSERT WITH CHECK (
-    order_id IN (
+    get_user_role() = 'CLIENT'
+    AND order_id IN (
       SELECT id FROM orders WHERE client_id = get_current_user_id()
         AND status = 'DELIVERED'
+        AND courier_id IS NOT NULL
     )
   );
 
+-- منع تعديل/حذف التقييمات بعد إضافتها
+-- (عشان مينفعش حد يغير تقييمه بعد كده)
+
 -- =============================================================
--- Unique Index: منع تكرار رقم موبايل المندوب
+-- Indexes لتحسين الأداء
 -- =============================================================
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_client_id ON orders(client_id);
+CREATE INDEX IF NOT EXISTS idx_orders_courier_id ON orders(courier_id);
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_couriers_user_id ON couriers(user_id);
+CREATE INDEX IF NOT EXISTS idx_couriers_status ON couriers(status);
+CREATE INDEX IF NOT EXISTS idx_ratings_courier_id ON courier_ratings(courier_id);
+CREATE INDEX IF NOT EXISTS idx_ads_active_date ON ad_offers(is_active, end_date);
+
+-- Unique Constraints
 CREATE UNIQUE INDEX IF NOT EXISTS couriers_phone_unique ON couriers(phone);
 CREATE UNIQUE INDEX IF NOT EXISTS users_phone_unique ON users(phone);
 
 -- =============================================================
 -- Function: قبول الأوردر بـ Atomic Transaction (منع Race Condition)
+-- SELECT FOR UPDATE NOWAIT = لو الصف محجوز من transaction تانية، بيرجع خطأ فوراً
 -- =============================================================
 CREATE OR REPLACE FUNCTION accept_order(
   p_order_id TEXT,
@@ -240,11 +291,20 @@ DECLARE
   v_order orders%ROWTYPE;
   v_result JSON;
 BEGIN
-  -- SELECT FOR UPDATE يقفل الصف عشان محدش يقدر ياخده في نفس الوقت
+  -- SELECT FOR UPDATE NOWAIT يقفل الصف عشان محدش يقدر ياخده في نفس الوقت
   SELECT * INTO v_order
   FROM orders
   WHERE id = p_order_id
   FOR UPDATE NOWAIT;
+
+  -- لو الأوردر مش موجود
+  IF NOT FOUND THEN
+    v_result := json_build_object(
+      'success', false,
+      'message', 'الأوردر مش موجود'
+    );
+    RETURN v_result;
+  END IF;
 
   -- لو الأوردر مش pending، يبعت رسالة خطأ
   IF v_order.status != 'PENDING' THEN
@@ -280,5 +340,39 @@ EXCEPTION
       'message', 'الأوردر بيتحجز دلوقتي، جرب تاني'
     );
     RETURN v_result;
+  WHEN OTHERS THEN
+    v_result := json_build_object(
+      'success', false,
+      'message', 'خطأ غير متوقع'
+    );
+    RETURN v_result;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- امنح صلاحية تشغيل الـ function للـ service role فقط
+REVOKE ALL ON FUNCTION accept_order(TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION accept_order(TEXT, TEXT) TO service_role;
+
+-- =============================================================
+-- Function: تحديث متوسط تقييم المندوب تلقائياً (Trigger)
+-- =============================================================
+CREATE OR REPLACE FUNCTION update_courier_avg_rating()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE couriers
+  SET rating = (
+    SELECT ROUND(AVG(rating)::NUMERIC, 1)
+    FROM courier_ratings
+    WHERE courier_id = NEW.courier_id
+  )
+  WHERE id = NEW.courier_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- إنشاء الـ trigger
+DROP TRIGGER IF EXISTS update_courier_rating_on_insert ON courier_ratings;
+CREATE TRIGGER update_courier_rating_on_insert
+  AFTER INSERT ON courier_ratings
+  FOR EACH ROW
+  EXECUTE FUNCTION update_courier_avg_rating();
