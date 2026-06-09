@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react'
-import { useAuth } from '@clerk/clerk-react'
+import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { Truck, CheckCircle, XCircle, Clock, Star, Phone, MapPin } from 'lucide-react'
 
