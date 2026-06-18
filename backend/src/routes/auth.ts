@@ -52,37 +52,75 @@ authRouter.post('/register', zValidator('json', registerSchema), async (c) => {
   const passwordHash = await hashPassword(password)
 
   // إنشاء يوزر جديد
+  const userId = crypto.randomUUID()
   const clerkId = `local_${phone}_${Date.now()}`
   const userName = role === 'CLIENT' ? `عميل_${phone.slice(-4)}` : (name || '')
 
-  const { data: newUser, error: userError } = await supabase
+  const now = new Date().toISOString()
+
+  // نبني الـ insert — نجرب مع password_hash/address أول
+  // لو مش موجودين، نحفظهم في avatar_url كـ JSON (pre-migration fallback)
+  const authData = JSON.stringify({ ph: passwordHash, addr: address || null })
+
+  const fullInsert = {
+    id: userId,
+    clerk_id: clerkId,
+    phone,
+    name: userName,
+    role,
+    password_hash: passwordHash,
+    address: address || null,
+    onboarded: true,
+    created_at: now,
+    updated_at: now,
+  }
+
+  let { data: newUser, error: userError } = await supabase
     .from('users')
-    .insert({
+    .insert(fullInsert)
+    .select('id, phone, name, role, onboarded')
+    .single()
+
+  // لو فشل بسبب عمود ناقص → نخزّن في avatar_url كـ fallback
+  if (userError && (userError.code === 'PGRST204' || userError.message?.includes('column'))) {
+    console.warn('Pre-migration mode — storing auth data in avatar_url')
+    const fallbackInsert = {
+      id: userId,
       clerk_id: clerkId,
       phone,
       name: userName,
       role,
-      password_hash: passwordHash,
-      address: address || null,
+      avatar_url: `__mndwbk__:${authData}`,
       onboarded: true,
-    })
-    .select('id, phone, name, role, address, onboarded')
-    .single()
+      created_at: now,
+      updated_at: now,
+    }
+    const fallback = await supabase
+      .from('users')
+      .insert(fallbackInsert)
+      .select('id, phone, name, role, avatar_url, onboarded')
+      .single()
+    newUser = fallback.data
+    userError = fallback.error
+  }
 
   if (userError || !newUser) {
     console.error('Register error:', userError)
     return c.json({ error: 'فشل التسجيل، جرب تاني' }, 500)
   }
 
-  // لو مندوب → إنشاء سجل courier فاضي
+  // لو مندوب → إنشاء سجل courier
   if (role === 'COURIER') {
-    await supabase.from('couriers').insert({
+    const courierInsert: Record<string, unknown> = {
       user_id: newUser.id,
       name: name || userName,
       phone,
-      address: address || '',
       status: 'PENDING_REVIEW',
-    }).select().single()
+    }
+    const { error: cErr } = await supabase.from('couriers').insert({ ...courierInsert, address: address || '' }).select().single()
+    if (cErr && (cErr.code === 'PGRST204' || cErr.message?.includes('column'))) {
+      await supabase.from('couriers').insert(courierInsert).select().single()
+    }
   }
 
   // توكن JWT
@@ -100,7 +138,7 @@ authRouter.post('/register', zValidator('json', registerSchema), async (c) => {
       phone: newUser.phone,
       name: newUser.name,
       role: newUser.role,
-      address: newUser.address,
+      address: address || null,
       onboarded: newUser.onboarded,
     },
   }, 201)
@@ -118,63 +156,90 @@ authRouter.post('/login', zValidator('json', loginSchema), async (c) => {
   const { phone, password } = c.req.valid('json')
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
-  // جيب اليوزر
-  const { data: user } = await supabase
+  // جيب اليوزر — نجرب مع password_hash/address أول، لو مش موجودين نجرب بدونهم
+  let userData: Record<string, unknown> | null = null
+  let resolvedPasswordHash: string | null = null
+  let resolvedAddress: string | null = null
+
+  const { data: fullUser, error: fullErr } = await supabase
     .from('users')
-    .select('id, phone, name, role, address, password_hash, onboarded')
+    .select('id, phone, name, role, address, password_hash, avatar_url, onboarded')
     .eq('phone', phone)
     .single()
 
-  if (!user) {
+  if (fullUser) {
+    userData = fullUser
+    resolvedPasswordHash = (fullUser.password_hash as string | null) || null
+    resolvedAddress = (fullUser.address as string | null) || null
+  } else if (fullErr?.code === 'PGRST204' || fullErr?.message?.includes('column')) {
+    // pre-migration → نجرب بـ columns الأساسية فقط
+    const { data: basicUser } = await supabase
+      .from('users')
+      .select('id, phone, name, role, avatar_url, onboarded')
+      .eq('phone', phone)
+      .single()
+    userData = basicUser
+  }
+
+  if (!userData) {
     return c.json({ error: 'الرقم أو الباسورد غلط' }, 401)
   }
 
-  if (!user.password_hash) {
-    return c.json({ error: 'الحساب ده محتاج تسجيل باسورد — سجّل حساب جديد' }, 401)
+  // استخرج الـ hash من avatar_url لو في pre-migration mode
+  if (!resolvedPasswordHash && userData.avatar_url) {
+    const avatarStr = String(userData.avatar_url)
+    if (avatarStr.startsWith('__mndwbk__:')) {
+      try {
+        const json = JSON.parse(avatarStr.replace('__mndwbk__:', ''))
+        resolvedPasswordHash = json.ph || null
+        resolvedAddress = json.addr || null
+      } catch { /* ignore */ }
+    }
+  }
+
+  if (!resolvedPasswordHash) {
+    return c.json({ error: 'الحساب ده مش عنده باسورد — سجّل حساب جديد' }, 401)
   }
 
   // تحقق من الباسورد
-  const valid = await verifyPassword(password, user.password_hash)
+  const valid = await verifyPassword(String(password), resolvedPasswordHash)
   if (!valid) {
     return c.json({ error: 'الرقم أو الباسورد غلط' }, 401)
   }
 
-  // حدّث last_seen_at
-  await supabase
-    .from('users')
-    .update({ last_seen_at: new Date().toISOString() })
-    .eq('id', user.id)
+  // حدّث last_seen_at لو العمود موجود
+  supabase.from('users').update({ last_seen_at: new Date().toISOString() }).eq('id', userData.id).then(() => {}).catch(() => {})
 
   // جيب بيانات المندوب لو موجود
   let courierData = null
-  if (user.role === 'COURIER') {
+  if (userData.role === 'COURIER') {
     const { data: courier } = await supabase
       .from('couriers')
       .select('id, status, name, is_online')
-      .eq('user_id', user.id)
+      .eq('user_id', userData.id)
       .single()
     courierData = courier
   }
 
   // توكن JWT
   const token = await signJWT({
-    userId: user.id,
-    phone: user.phone,
-    role: user.role,
+    userId: userData.id,
+    phone: userData.phone,
+    role: userData.role,
   }, c.env.JWT_SECRET || 'mandoubak-jwt-secret-2024')
 
   return c.json({
     success: true,
     token,
     user: {
-      id: user.id,
-      phone: user.phone,
-      name: user.name,
-      role: user.role,
-      address: user.address,
-      onboarded: user.onboarded,
-      courierStatus: courierData?.status || null,
-      courierId: courierData?.id || null,
+      id: userData.id,
+      phone: userData.phone,
+      name: userData.name,
+      role: userData.role,
+      address: resolvedAddress || (userData.address as string | null) || null,
+      onboarded: userData.onboarded,
+      courierStatus: (courierData as Record<string, unknown> | null)?.status || null,
+      courierId: (courierData as Record<string, unknown> | null)?.id || null,
     },
   })
 })
