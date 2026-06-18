@@ -14,6 +14,7 @@ export interface AppUser {
   email: string | null
   role: UserRole
   avatar: string | null
+  onboarded?: boolean
   isDemo?: boolean
 }
 
@@ -22,6 +23,7 @@ export interface AuthContextType {
   role: UserRole
   isLoggedIn: boolean
   isLoading: boolean
+  needsOnboarding: boolean
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
   demoLogin?: (role: UserRole) => void
@@ -32,14 +34,15 @@ export const AuthContext = createContext<AuthContextType>({
   role: null,
   isLoggedIn: false,
   isLoading: false,
+  needsOnboarding: false,
   logout: async () => {},
   refreshUser: async () => {},
 })
 
 const DEMO_USERS: Record<NonNullable<UserRole>, AppUser> = {
-  client:  { id: 'demo-client',  name: 'أحمد العميل',  phone: '01012345678', email: null, role: 'client',  avatar: null, isDemo: true },
-  courier: { id: 'demo-courier', name: 'محمد المندوب', phone: '01098765432', email: null, role: 'courier', avatar: null, isDemo: true },
-  admin:   { id: 'demo-admin',   name: 'أدمن المنصة',  phone: '01111111111', email: null, role: 'admin',   avatar: null, isDemo: true },
+  client:  { id: 'demo-client',  name: 'أحمد العميل',  phone: '01012345678', email: null, role: 'client',  avatar: null, onboarded: true, isDemo: true },
+  courier: { id: 'demo-courier', name: 'محمد المندوب', phone: '01098765432', email: null, role: 'courier', avatar: null, onboarded: true, isDemo: true },
+  admin:   { id: 'demo-admin',   name: 'أدمن المنصة',  phone: '01111111111', email: null, role: 'admin',   avatar: null, onboarded: true, isDemo: true },
 }
 
 export function DemoAuthProvider({ children }: { children: ReactNode }) {
@@ -63,6 +66,7 @@ export function DemoAuthProvider({ children }: { children: ReactNode }) {
       role: user?.role || null,
       isLoggedIn: !!user,
       isLoading: false,
+      needsOnboarding: false,
       logout: async () => {
         setUser(null)
         localStorage.removeItem('mandoubak_demo_user')

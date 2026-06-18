@@ -1,7 +1,6 @@
 -- =============================================================
 -- Clerk Webhook Migration
 -- شغّل الكود ده في Supabase SQL Editor مرة واحدة
--- عشان تضيف الأعمدة المطلوبة للـ webhook
 -- =============================================================
 
 -- إضافة اسم اليوزر لو مش موجود
@@ -12,6 +11,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
 -- Soft delete support
 ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+-- Onboarding flag: false = مستخدم جديد لسه محتاج يختار دوره
+ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded BOOLEAN NOT NULL DEFAULT false;
 
 -- =============================================================
 -- Setup Instructions للـ Clerk Webhook

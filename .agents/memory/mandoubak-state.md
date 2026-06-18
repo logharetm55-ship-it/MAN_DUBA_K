@@ -81,6 +81,15 @@ description: Full state of the Mandoubak delivery platform — what's built, arc
 - Trigger: `update_courier_avg_rating` auto-updates courier.rating
 - Seeded: 6 ad_offers + admin_pricing zones (default/القاهرة/الجيزة)
 
+## Onboarding Flow
+- New Clerk users arrive with `onboarded = false` in Supabase (set by webhook)
+- `clerk-auth-inner.tsx` exposes `needsOnboarding` in AuthContext
+- `OnboardingGuard` in `App.tsx` intercepts all routes and redirects to `/onboarding` if needed
+- `/onboarding` page: full-screen card picker (عميل / مندوب) → calls `POST /api/users/onboard`
+- After onboard: `onboarded = true`, role updated, redirect to correct dashboard
+- Demo users always have `onboarded: true` — guard is skipped for them
+- Onboarding outside Layout (no navbar/footer) — rendered directly in Routes above <Route element={<Layout/>}>
+
 ## Key decisions
 **Why getSupabaseClient singleton:** prevents multiple RealtimeClient initializations per request
 **Why ws package:** Node.js 20 lacks native WebSocket

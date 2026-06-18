@@ -14,6 +14,16 @@ interface Props {
   children: ReactNode
 }
 
+interface SupabaseProfile {
+  id: string
+  name: string
+  phone: string | null
+  email: string | null
+  role: string
+  avatar_url: string | null
+  onboarded: boolean
+}
+
 export function ClerkAuthProviderInner({ AuthContext, children }: Props) {
   const { user: clerkUser, isLoaded, isSignedIn } = useUser()
   const { signOut } = useClerk()
@@ -34,17 +44,9 @@ export function ClerkAuthProviderInner({ AuthContext, children }: Props) {
     setIsLoading(true)
 
     try {
-      // جيب token من Clerk session
       const token = await getToken() || ''
 
-      let profile: {
-        id: string
-        name: string
-        phone: string | null
-        email: string | null
-        role: string
-        avatar_url: string | null
-      } | null = null
+      let profile: SupabaseProfile | null = null
 
       if (token) {
         try {
@@ -69,6 +71,7 @@ export function ClerkAuthProviderInner({ AuthContext, children }: Props) {
         email: profile?.email || clerkUser.primaryEmailAddress?.emailAddress || null,
         role: profile?.role ? (roleMap[profile.role] || 'client') : 'client',
         avatar: profile?.avatar_url || clerkUser.imageUrl || null,
+        onboarded: profile?.onboarded ?? false,
       })
     } catch (err) {
       console.error('Error syncing user:', err)
@@ -82,12 +85,15 @@ export function ClerkAuthProviderInner({ AuthContext, children }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, isSignedIn, clerkUser?.id])
 
+  const needsOnboarding = !!appUser && appUser.onboarded === false
+
   return (
     <AuthContext.Provider value={{
       user: appUser,
       role: appUser?.role || null,
       isLoggedIn: !!appUser,
       isLoading: !isLoaded || isLoading,
+      needsOnboarding,
       logout: async () => {
         await signOut()
         setAppUser(null)

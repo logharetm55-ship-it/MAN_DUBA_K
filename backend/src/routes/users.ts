@@ -1,5 +1,5 @@
 // =============================================================
-// Users Routes - جلب بيانات اليوزر الحالي
+// Users Routes - جلب وتحديث بيانات اليوزر
 // =============================================================
 
 import { Hono } from 'hono'
@@ -17,7 +17,7 @@ usersRouter.get('/me', authMiddleware, async (c) => {
 
   const { data: user, error } = await supabase
     .from('users')
-    .select('id, clerk_id, name, email, phone, role, avatar_url, created_at')
+    .select('id, clerk_id, name, email, phone, role, avatar_url, onboarded, created_at')
     .eq('clerk_id', authUser.clerkId)
     .single()
 
@@ -45,12 +45,44 @@ usersRouter.patch('/me', authMiddleware, async (c) => {
     .from('users')
     .update(allowed)
     .eq('clerk_id', authUser.clerkId)
-    .select('id, clerk_id, name, email, phone, role, avatar_url')
+    .select('id, clerk_id, name, email, phone, role, avatar_url, onboarded')
     .single()
 
   if (error) {
     return c.json({ error: 'فشل تحديث البيانات' }, 500)
   }
 
+  return c.json(data)
+})
+
+// POST /api/users/onboard - اختيار الدور بعد التسجيل الأول
+usersRouter.post('/onboard', authMiddleware, async (c) => {
+  const authUser = c.get('user')
+  const body = await c.req.json() as { role: 'CLIENT' | 'COURIER' }
+
+  if (!['CLIENT', 'COURIER'].includes(body.role)) {
+    return c.json({ error: 'الدور مش صحيح' }, 400)
+  }
+
+  const { createClient } = await import('@supabase/supabase-js')
+  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+
+  const { data, error } = await supabase
+    .from('users')
+    .update({
+      role: body.role,
+      onboarded: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('clerk_id', authUser.clerkId)
+    .select('id, clerk_id, name, email, phone, role, avatar_url, onboarded')
+    .single()
+
+  if (error) {
+    console.error('Onboard error:', error)
+    return c.json({ error: 'فشل تحديث الدور' }, 500)
+  }
+
+  console.log(`✅ User onboarded as ${body.role}:`, authUser.clerkId)
   return c.json(data)
 })
