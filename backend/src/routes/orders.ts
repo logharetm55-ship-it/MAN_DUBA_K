@@ -89,6 +89,7 @@ ordersRouter.post('/', requireRole('CLIENT', 'ADMIN'), async (c) => {
   }
 
   const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
+  const orderId = crypto.randomUUID()
 
   let orderData: Record<string, unknown>
   let orderItems: { order_id: string; name: string; quantity: number; price?: number; shop_name: string; shop_address?: string }[] = []
@@ -99,6 +100,7 @@ ordersRouter.post('/', requireRole('CLIENT', 'ADMIN'), async (c) => {
     const priceResult = calculateShoppingFee(numShops, pricing)
 
     orderData = {
+      id: orderId,
       order_number: orderNumber,
       client_id: user.userId,
       type: 'SHOPPING',
@@ -141,6 +143,7 @@ ordersRouter.post('/', requireRole('CLIENT', 'ADMIN'), async (c) => {
     const priceResult = calculateDeliveryFee(distanceKm, pricing)
 
     orderData = {
+      id: orderId,
       order_number: orderNumber,
       client_id: user.userId,
       type: 'DELIVERY',
