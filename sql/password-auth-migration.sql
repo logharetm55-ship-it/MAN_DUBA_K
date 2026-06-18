@@ -44,5 +44,19 @@ GRANT SELECT ON security_alerts TO authenticated;
 
 -- RLS for security_alerts (admin only via service_role key)
 ALTER TABLE security_alerts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "service_role_all_security_alerts" ON security_alerts
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- CREATE POLICY لا تدعم IF NOT EXISTS — بنحذفها الأول لو موجودة ثم ننشئها
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'security_alerts'
+      AND policyname = 'service_role_all_security_alerts'
+  ) THEN
+    EXECUTE '
+      CREATE POLICY "service_role_all_security_alerts" ON security_alerts
+        FOR ALL TO service_role USING (true) WITH CHECK (true)
+    ';
+  END IF;
+END
+$$;
