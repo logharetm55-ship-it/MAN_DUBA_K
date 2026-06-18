@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Home, Package, Bell, User, Truck, DollarSign, ShieldCheck } from 'lucide-react'
+import { Home, Package, Bell, User, Truck, DollarSign } from 'lucide-react'
 import { useNotifications } from '../lib/notifications-context'
 import { useAuth } from '../lib/auth-context'
 
@@ -11,52 +11,44 @@ export default function BottomNav() {
 
   const isActive = (to: string) => to === '/' ? path === '/' : path.startsWith(to)
 
-  // Different nav based on role
+  const notifIcon = (
+    <div className="relative">
+      <Bell size={22} />
+      {unreadCount > 0 && (
+        <span className="absolute -top-2 -left-2 w-4 h-4 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center">
+          {unreadCount > 9 ? '9+' : unreadCount}
+        </span>
+      )}
+    </div>
+  )
+
+  // عميل مسجل
   const clientNav = [
     { to: '/', icon: <Home size={22} />, label: 'الرئيسية' },
     { to: '/order', icon: <Package size={22} />, label: 'اطلب' },
     { to: '/my-orders', icon: <Truck size={22} />, label: 'طلباتي' },
-    {
-      to: '/notifications', label: 'إشعارات',
-      icon: <div className="relative"><Bell size={22} />{unreadCount > 0 && <span className="absolute -top-2 -left-2 w-4 h-4 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center">{unreadCount > 9 ? '9+' : unreadCount}</span>}</div>
-    },
+    { to: '/notifications', icon: notifIcon, label: 'إشعارات' },
     { to: '/profile', icon: <User size={22} />, label: 'حسابي' },
   ]
 
+  // مندوب
   const courierNav = [
     { to: '/', icon: <Home size={22} />, label: 'الرئيسية' },
     { to: '/courier/dashboard', icon: <Truck size={22} />, label: 'الطلبات' },
     { to: '/courier/earnings', icon: <DollarSign size={22} />, label: 'أرباحي' },
-    {
-      to: '/notifications', label: 'إشعارات',
-      icon: <div className="relative"><Bell size={22} />{unreadCount > 0 && <span className="absolute -top-2 -left-2 w-4 h-4 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center">{unreadCount > 9 ? '9+' : unreadCount}</span>}</div>
-    },
+    { to: '/notifications', icon: notifIcon, label: 'إشعارات' },
     { to: '/courier/profile', icon: <User size={22} />, label: 'بروفايلي' },
   ]
 
-  const adminNav = [
-    { to: '/', icon: <Home size={22} />, label: 'الرئيسية' },
-    { to: '/admin', icon: <ShieldCheck size={22} />, label: 'لوحة القيادة' },
-    { to: '/admin/couriers', icon: <Truck size={22} />, label: 'المناديب' },
-    { to: '/admin/ads', icon: <Package size={22} />, label: 'الإعلانات' },
-    {
-      to: '/notifications', label: 'إشعارات',
-      icon: <div className="relative"><Bell size={22} />{unreadCount > 0 && <span className="absolute -top-2 -left-2 w-4 h-4 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center">{unreadCount > 9 ? '9+' : unreadCount}</span>}</div>
-    },
-  ]
-
+  // زائر غير مسجل
   const guestNav = [
     { to: '/', icon: <Home size={22} />, label: 'الرئيسية' },
     { to: '/order', icon: <Package size={22} />, label: 'اطلب' },
-    {
-      to: '/notifications', label: 'إشعارات',
-      icon: <div className="relative"><Bell size={22} />{unreadCount > 0 && <span className="absolute -top-2 -left-2 w-4 h-4 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center">{unreadCount > 9 ? '9+' : unreadCount}</span>}</div>
-    },
+    { to: '/notifications', icon: notifIcon, label: 'إشعارات' },
     { to: '/login', icon: <User size={22} />, label: 'دخول' },
   ]
 
   const navItems = user?.role === 'courier' ? courierNav
-    : user?.role === 'admin' ? adminNav
     : user?.role === 'client' ? clientNav
     : guestNav
 

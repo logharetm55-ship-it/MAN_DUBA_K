@@ -1,27 +1,39 @@
 import { useState } from 'react'
-import { User, Phone, MapPin, Package, Star, Edit3, Save, X, LogOut } from 'lucide-react'
+import { User, Phone, MapPin, Package, Star, Edit3, Save, X, LogOut, Camera } from 'lucide-react'
 import { useAuth } from '../lib/auth-context'
 import { useNavigate, Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
 export default function ClientProfile() {
-  const { user, logout } = useAuth()
+  const { user, logout, updateUser } = useAuth()
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
-  const [name, setName] = useState(user?.name || 'أحمد العميل')
-  const [phone, setPhone] = useState(user?.phone || '01012345678')
-  const [address, setAddress] = useState('شارع النيل، الزمالك، القاهرة')
+  const [name, setName] = useState(user?.name || '')
+  const [address, setAddress] = useState(user?.address || '')
+
+  if (!user) {
+    navigate('/login')
+    return null
+  }
 
   function saveProfile() {
+    updateUser({ name, address })
     toast.success('تم حفظ البيانات ✅')
     setEditing(false)
+  }
+
+  async function handleLogout() {
+    localStorage.removeItem('mandoubak_admin_session')
+    await logout()
+    toast.success('تم الخروج 👋')
+    navigate('/login')
   }
 
   const DEMO_STATS = [
     { label: 'إجمالي الطلبات', value: 24, icon: '📦' },
     { label: 'إجمالي الإنفاق', value: '680 ج', icon: '💰' },
     { label: 'متوسط سعر التوصيل', value: '28 ج', icon: '🛵' },
-    { label: 'مناديب مفضلين', value: 3, icon: '⭐' },
+    { label: 'تقييماتي للمناديب', value: 8, icon: '⭐' },
   ]
 
   const RECENT_COURIERS = [
@@ -43,13 +55,21 @@ export default function ClientProfile() {
 
       {/* Avatar & Name */}
       <div className="card text-center">
-        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 text-3xl font-black text-blue-600">
-          {name[0]}
+        <div className="relative w-20 h-20 mx-auto mb-3">
+          <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center text-3xl font-black text-blue-600">
+            {(name || user.phone || '؟')[0]}
+          </div>
+          {editing && (
+            <button className="absolute bottom-0 left-0 w-7 h-7 bg-orange-500 text-white rounded-full flex items-center justify-center shadow-md hover:bg-orange-600 transition-colors">
+              <Camera size={14} />
+            </button>
+          )}
         </div>
         {editing ? (
-          <input className="input text-center text-lg font-bold mb-2" value={name} onChange={e => setName(e.target.value)} />
+          <input className="input text-center text-lg font-bold mb-2" value={name}
+            onChange={e => setName(e.target.value)} placeholder="اسمك" />
         ) : (
-          <h2 className="text-xl font-black">{name}</h2>
+          <h2 className="text-xl font-black">{name || user.phone}</h2>
         )}
         <div className="inline-flex items-center gap-1 bg-blue-100 text-blue-600 text-xs font-bold px-3 py-1 rounded-full mt-1">
           👤 عميل
@@ -62,18 +82,16 @@ export default function ClientProfile() {
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <Phone size={16} className="text-orange-500 flex-shrink-0" />
-            {editing ? (
-              <input className="input flex-1 text-sm" value={phone} onChange={e => setPhone(e.target.value)} dir="ltr" />
-            ) : (
-              <span className="text-sm font-semibold">{phone}</span>
-            )}
+            <span className="text-sm font-semibold text-gray-700" dir="ltr">{user.phone}</span>
+            <span className="text-xs text-gray-400 mr-auto">(لا يمكن تغييره)</span>
           </div>
           <div className="flex items-start gap-3">
             <MapPin size={16} className="text-orange-500 flex-shrink-0 mt-0.5" />
             {editing ? (
-              <input className="input flex-1 text-sm" value={address} onChange={e => setAddress(e.target.value)} />
+              <input className="input flex-1 text-sm" value={address}
+                onChange={e => setAddress(e.target.value)} placeholder="عنوانك" />
             ) : (
-              <span className="text-sm font-semibold">{address}</span>
+              <span className="text-sm font-semibold text-gray-700">{address || 'لم يُحدد بعد'}</span>
             )}
           </div>
         </div>
@@ -95,7 +113,7 @@ export default function ClientProfile() {
         ))}
       </div>
 
-      {/* Recent Couriers */}
+      {/* Recent Couriers — مناديب خدموني */}
       <div className="card">
         <h3 className="font-bold mb-4">🛵 أكتر المناديب معك</h3>
         <div className="space-y-3">
@@ -127,7 +145,7 @@ export default function ClientProfile() {
           </div>
         </Link>
         <Link to="/order" className="card flex items-center gap-3 hover:shadow-md transition-all">
-          <span className="text-2xl">+</span>
+          <span className="text-2xl">📦</span>
           <div>
             <div className="font-bold text-sm">طلب جديد</div>
             <div className="text-xs text-gray-400">اطلب دلوقتي</div>
@@ -136,7 +154,7 @@ export default function ClientProfile() {
       </div>
 
       {/* Logout */}
-      <button onClick={() => { logout(); navigate('/login'); toast.success('تم الخروج 👋') }}
+      <button onClick={handleLogout}
         className="w-full flex items-center justify-center gap-2 py-3 text-red-500 hover:bg-red-50 rounded-2xl font-bold transition-all">
         <LogOut size={18} />
         خروج

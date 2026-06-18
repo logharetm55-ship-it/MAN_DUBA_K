@@ -51,12 +51,15 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
 }
 
 // =============================================================
-// Guard: Admin only
+// Guard: Admin only — يتحقق من admin flag في localStorage أو role
 // =============================================================
 function AdminGuard({ children }: { children: React.ReactNode }) {
-  const { user, isLoggedIn } = useAuth()
-  if (!isLoggedIn) return <Navigate to="/login" replace />
-  if (user?.role !== 'admin') return <Navigate to="/" replace />
+  const { user } = useAuth()
+  const adminSession = localStorage.getItem('mandoubak_admin_session') === 'true'
+
+  if (!adminSession && user?.role !== 'admin') {
+    return <Navigate to="/" replace />
+  }
   return <>{children}</>
 }
 

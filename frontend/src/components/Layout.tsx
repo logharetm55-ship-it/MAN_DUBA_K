@@ -17,9 +17,9 @@ const ADMIN_PASSWORD = '255009'
 const MAX_FAILED_ATTEMPTS = 4
 const LOCKOUT_KEY = 'mandoubak_admin_lockout'
 const FAILED_KEY = 'mandoubak_admin_failed'
+const ADMIN_SESSION_KEY = 'mandoubak_admin_session'
 
 function AdminLoginModal({ onClose }: { onClose: () => void }) {
-  const { token } = useAuth()
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -39,11 +39,11 @@ function AdminLoginModal({ onClose }: { onClose: () => void }) {
     setLoading(true)
     setError('')
 
-    // Frontend check (admin credentials are hardcoded for security simplicity)
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-      // Reset failed attempts
       localStorage.removeItem(FAILED_KEY)
       localStorage.removeItem(LOCKOUT_KEY)
+      // حفظ admin session flag
+      localStorage.setItem(ADMIN_SESSION_KEY, 'true')
 
       toast.success('أهلاً يا سلام 🛡️')
       onClose()
@@ -53,11 +53,9 @@ function AdminLoginModal({ onClose }: { onClose: () => void }) {
       localStorage.setItem(FAILED_KEY, String(newFailed))
 
       if (newFailed >= MAX_FAILED_ATTEMPTS) {
-        // Lock for 30 minutes
         const lockUntil = Date.now() + 30 * 60 * 1000
         localStorage.setItem(LOCKOUT_KEY, String(lockUntil))
 
-        // Report to backend
         try {
           await fetch('/api/security/alert', {
             method: 'POST',
@@ -169,8 +167,8 @@ export default function Layout() {
 
     if (clickCountRef.current >= ADMIN_CLICK_COUNT) {
       clickCountRef.current = 0
-      // If already admin, navigate directly
-      if (user?.role === 'admin') {
+      const adminSession = localStorage.getItem(ADMIN_SESSION_KEY) === 'true'
+      if (adminSession || user?.role === 'admin') {
         navigate('/admin-secret')
       } else {
         setAdminModal(true)
@@ -178,7 +176,6 @@ export default function Layout() {
       return
     }
 
-    // Reset if no more clicks in 3 seconds
     clickTimerRef.current = setTimeout(() => {
       clickCountRef.current = 0
     }, 3000)
@@ -186,12 +183,29 @@ export default function Layout() {
 
   const isActive = (path: string) => path === '/' ? location.pathname === '/' : location.pathname.startsWith(path)
 
-  // Nav links — no admin link visible
-  const navLinks = [
-    { to: '/', icon: <Home size={18} />, label: 'الرئيسية' },
-    { to: '/order', icon: <Package size={18} />, label: 'اطلب الآن' },
-    { to: '/courier/dashboard', icon: <Truck size={18} />, label: 'المناديب' },
-  ]
+  // Nav links — حسب الدور
+  const getNavLinks = () => {
+    if (user?.role === 'courier') {
+      return [
+        { to: '/', icon: <Home size={18} />, label: 'الرئيسية' },
+        { to: '/courier/dashboard', icon: <Truck size={18} />, label: 'الطلبات' },
+      ]
+    }
+    if (user?.role === 'client') {
+      return [
+        { to: '/', icon: <Home size={18} />, label: 'الرئيسية' },
+        { to: '/order', icon: <Package size={18} />, label: 'اطلب الآن' },
+      ]
+    }
+    // guest
+    return [
+      { to: '/', icon: <Home size={18} />, label: 'الرئيسية' },
+      { to: '/order', icon: <Package size={18} />, label: 'اطلب الآن' },
+      { to: '/courier/register', icon: <Truck size={18} />, label: 'انضم كمندوب' },
+    ]
+  }
+
+  const navLinks = getNavLinks()
 
   const ROLE_COLORS: Record<string, string> = {
     client: 'bg-blue-500',
@@ -202,6 +216,12 @@ export default function Layout() {
     client: 'عميل',
     courier: 'مندوب',
     admin: 'أدمن',
+  }
+
+  async function handleLogout() {
+    localStorage.removeItem(ADMIN_SESSION_KEY)
+    await logout()
+    navigate('/login')
   }
 
   return (
@@ -238,16 +258,6 @@ export default function Layout() {
                   {link.label}
                 </Link>
               ))}
-              {/* Admin link if already admin */}
-              {user?.role === 'admin' && (
-                <Link to="/admin-secret"
-                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                    isActive('/admin-secret') ? 'bg-purple-50 text-purple-600' : 'text-gray-600 hover:bg-gray-100'
-                  }`}>
-                  <ShieldCheck size={18} />
-                  الأدمن
-                </Link>
-              )}
             </div>
 
             {/* Right side */}
@@ -284,26 +294,32 @@ export default function Layout() {
                   {userDropdown && (
                     <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 animate-fade-in">
                       {user.role === 'client' && (
-                        <Link to="/my-orders" onClick={() => setUserDropdown(false)}
-                          className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors">
-                          <Package size={16} className="text-orange-500" /> طلباتي
-                        </Link>
+                        <>
+                          <Link to="/profile" onClick={() => setUserDropdown(false)}
+                            className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors">
+                            <User size={16} className="text-blue-500" /> حسابي
+                          </Link>
+                          <Link to="/my-orders" onClick={() => setUserDropdown(false)}
+                            className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors">
+                            <Package size={16} className="text-orange-500" /> طلباتي
+                          </Link>
+                        </>
                       )}
                       {user.role === 'courier' && (
-                        <Link to="/courier/profile" onClick={() => setUserDropdown(false)}
-                          className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors">
-                          <User size={16} className="text-blue-500" /> بروفايلي
-                        </Link>
-                      )}
-                      {user.role === 'admin' && (
-                        <Link to="/admin-secret" onClick={() => setUserDropdown(false)}
-                          className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors">
-                          <ShieldCheck size={16} className="text-purple-500" /> لوحة الأدمن
-                        </Link>
+                        <>
+                          <Link to="/courier/profile" onClick={() => setUserDropdown(false)}
+                            className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors">
+                            <User size={16} className="text-orange-500" /> بروفايلي
+                          </Link>
+                          <Link to="/courier/dashboard" onClick={() => setUserDropdown(false)}
+                            className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors">
+                            <Truck size={16} className="text-blue-500" /> الطلبات
+                          </Link>
+                        </>
                       )}
                       <div className="border-t border-gray-100 my-1" />
                       <button
-                        onClick={() => { logout(); setUserDropdown(false); navigate('/login') }}
+                        onClick={() => { handleLogout(); setUserDropdown(false) }}
                         className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors"
                       >
                         <LogOut size={16} /> خروج
@@ -348,12 +364,6 @@ export default function Layout() {
                 {link.label}
               </Link>
             ))}
-            {user?.role === 'admin' && (
-              <Link to="/admin-secret" onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold text-purple-600 bg-purple-50">
-                <ShieldCheck size={18} /> لوحة الأدمن
-              </Link>
-            )}
             {user ? (
               <div className="border-t border-gray-100 pt-2 mt-2 space-y-1">
                 <div className="flex items-center gap-3 px-4 py-2">
@@ -365,7 +375,19 @@ export default function Layout() {
                     <div className="text-xs text-gray-500">{ROLE_LABELS[user.role!] || user.role}</div>
                   </div>
                 </div>
-                <button onClick={() => { logout(); navigate('/login'); setMenuOpen(false) }}
+                {user.role === 'client' && (
+                  <Link to="/profile" onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50">
+                    <User size={16} className="text-blue-500" /> حسابي
+                  </Link>
+                )}
+                {user.role === 'courier' && (
+                  <Link to="/courier/profile" onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50">
+                    <User size={16} className="text-orange-500" /> بروفايلي
+                  </Link>
+                )}
+                <button onClick={() => { handleLogout(); setMenuOpen(false) }}
                   className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm text-red-500 hover:bg-red-50">
                   <LogOut size={16} /> خروج
                 </button>

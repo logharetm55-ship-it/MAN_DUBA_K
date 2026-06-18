@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { Package, Truck, Star, Clock, ChevronLeft, ShoppingBag, MapPin, Zap, Shield } from 'lucide-react'
+import { Package, Truck, Star, Clock, ChevronLeft, ShoppingBag, MapPin, Zap, Shield, User } from 'lucide-react'
 import { createClient } from '@supabase/supabase-js'
 import { useAuth } from '../lib/auth-context'
 
@@ -121,7 +121,6 @@ export default function HomePage() {
       const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 
-      // لو المفتاح مش موجود أو نص وصفي، استخدم البيانات التجريبية فوراً
       if (!anonKey || !anonKey.startsWith('eyJ') || !supabaseUrl) {
         setAdsLoading(false)
         return
@@ -168,6 +167,66 @@ export default function HomePage() {
     })
   }
 
+  // ===== لوحة المندوب =====
+  if (user?.role === 'courier') {
+    return (
+      <div className="space-y-6">
+        {/* Welcome */}
+        <div className="bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 rounded-3xl p-6 text-white">
+          <h1 className="text-2xl font-black mb-1">أهلاً {user.name?.split(' ')[0]} 👋</h1>
+          <p className="text-orange-100">مستعد لطلبات اليوم؟</p>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-2 gap-4">
+          <Link to="/courier/dashboard"
+            className="card flex flex-col items-center gap-3 py-6 hover:shadow-md transition-all text-center group">
+            <div className="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center group-hover:bg-orange-200 transition-colors">
+              <Truck className="text-orange-600" size={28} />
+            </div>
+            <div>
+              <div className="font-bold">الطلبات المتاحة</div>
+              <div className="text-xs text-gray-500">اطلب أوردر الآن</div>
+            </div>
+          </Link>
+          <Link to="/courier/profile"
+            className="card flex flex-col items-center gap-3 py-6 hover:shadow-md transition-all text-center group">
+            <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+              <User className="text-blue-600" size={28} />
+            </div>
+            <div>
+              <div className="font-bold">بروفايلي</div>
+              <div className="text-xs text-gray-500">بياناتي وتقييماتي</div>
+            </div>
+          </Link>
+        </div>
+
+        {/* Offers */}
+        <div>
+          <h2 className="text-xl font-black mb-4">عروض اليوم 🔥</h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {ads.slice(0, 6).map(ad => (
+              <div key={ad.id} className="card overflow-hidden p-0 group">
+                <img src={ad.image_url} alt={ad.title}
+                  className="w-full h-36 object-cover"
+                  onError={e => { (e.target as HTMLImageElement).src = 'https://placehold.co/400x250/f97316/white?text=عرض' }}
+                />
+                <div className="p-3">
+                  <h3 className="font-bold text-sm text-gray-900 line-clamp-1">{ad.title}</h3>
+                  <div className="flex items-center gap-1 text-gray-400 text-xs mt-1">
+                    <MapPin size={12} />
+                    <span>{ad.shop_name}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ===== الصفحة الرئيسية للعميل أو الضيف =====
   return (
     <div className="space-y-8">
       {/* Hero */}
@@ -187,13 +246,26 @@ export default function HomePage() {
               <Package size={20} />
               اطلب دلوقتي
             </Link>
-            <Link
-              to="/courier/register"
-              className="bg-orange-400 text-white font-bold px-6 py-3 rounded-xl hover:bg-orange-300 transition-all border border-white/30 flex items-center gap-2"
-            >
-              <Truck size={20} />
-              انضم كمندوب
-            </Link>
+            {/* زر الانضمام كمندوب — يظهر فقط للزوار غير المسجلين */}
+            {!user && (
+              <Link
+                to="/courier/register"
+                className="bg-orange-400 text-white font-bold px-6 py-3 rounded-xl hover:bg-orange-300 transition-all border border-white/30 flex items-center gap-2"
+              >
+                <Truck size={20} />
+                انضم كمندوب
+              </Link>
+            )}
+            {/* للعميل المسجل: رابط حسابه */}
+            {user?.role === 'client' && (
+              <Link
+                to="/profile"
+                className="bg-orange-400 text-white font-bold px-6 py-3 rounded-xl hover:bg-orange-300 transition-all border border-white/30 flex items-center gap-2"
+              >
+                <User size={20} />
+                حسابي
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -307,29 +379,57 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Quick Nav */}
-      <div className="grid grid-cols-2 gap-4">
-        <Link to="/courier/dashboard" className="card flex items-center gap-4 hover:shadow-md transition-all group">
-          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-            <Truck className="text-blue-600" size={24} />
-          </div>
-          <div>
-            <div className="font-bold">لوحة المناديب</div>
-            <div className="text-xs text-gray-500">شوف الطلبات Live</div>
-          </div>
-          <ChevronLeft size={18} className="text-gray-400 mr-auto" />
-        </Link>
-        <Link to="/admin" className="card flex items-center gap-4 hover:shadow-md transition-all group">
-          <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center group-hover:bg-purple-200 transition-colors">
-            <Shield className="text-purple-600" size={24} />
-          </div>
-          <div>
-            <div className="font-bold">لوحة الأدمن</div>
-            <div className="text-xs text-gray-500">إدارة المنصة</div>
-          </div>
-          <ChevronLeft size={18} className="text-gray-400 mr-auto" />
-        </Link>
-      </div>
+      {/* Quick Nav — للزوار غير المسجلين فقط */}
+      {!user && (
+        <div className="grid grid-cols-2 gap-4">
+          <Link to="/order" className="card flex items-center gap-4 hover:shadow-md transition-all group">
+            <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center group-hover:bg-orange-200 transition-colors">
+              <Package className="text-orange-600" size={24} />
+            </div>
+            <div>
+              <div className="font-bold">اطلب الآن</div>
+              <div className="text-xs text-gray-500">توصيل سريع</div>
+            </div>
+            <ChevronLeft size={18} className="text-gray-400 mr-auto" />
+          </Link>
+          <Link to="/courier/register" className="card flex items-center gap-4 hover:shadow-md transition-all group">
+            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+              <Truck className="text-blue-600" size={24} />
+            </div>
+            <div>
+              <div className="font-bold">انضم كمندوب</div>
+              <div className="text-xs text-gray-500">اشتغل واكسب</div>
+            </div>
+            <ChevronLeft size={18} className="text-gray-400 mr-auto" />
+          </Link>
+        </div>
+      )}
+
+      {/* Quick Nav — للعميل المسجل */}
+      {user?.role === 'client' && (
+        <div className="grid grid-cols-2 gap-4">
+          <Link to="/my-orders" className="card flex items-center gap-4 hover:shadow-md transition-all group">
+            <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center group-hover:bg-orange-200 transition-colors">
+              <Package className="text-orange-600" size={24} />
+            </div>
+            <div>
+              <div className="font-bold">طلباتي</div>
+              <div className="text-xs text-gray-500">تتبع طلباتك</div>
+            </div>
+            <ChevronLeft size={18} className="text-gray-400 mr-auto" />
+          </Link>
+          <Link to="/profile" className="card flex items-center gap-4 hover:shadow-md transition-all group">
+            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+              <User className="text-blue-600" size={24} />
+            </div>
+            <div>
+              <div className="font-bold">حسابي</div>
+              <div className="text-xs text-gray-500">بياناتي الشخصية</div>
+            </div>
+            <ChevronLeft size={18} className="text-gray-400 mr-auto" />
+          </Link>
+        </div>
+      )}
     </div>
   )
 }
