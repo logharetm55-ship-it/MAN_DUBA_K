@@ -47,6 +47,12 @@
            transition-all duration-200 bg-white text-right;
   }
 
+  .input-field {
+    @apply w-full px-4 py-3 pl-10 rounded-xl border border-gray-200
+           focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent
+           transition-all duration-200 bg-white text-right;
+  }
+
   .badge-pending {
     @apply bg-yellow-100 text-yellow-700 text-xs font-bold px-2 py-1 rounded-full;
   }

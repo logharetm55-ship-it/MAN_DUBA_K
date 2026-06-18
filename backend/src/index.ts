@@ -1,5 +1,5 @@
 // =============================================================
-// مندوبك - Cloudflare Workers + Hono Main Entry
+// مندوبك - Hono Main Entry
 // =============================================================
 
 import { Hono } from 'hono'
@@ -12,8 +12,8 @@ import { couriersRouter } from './routes/couriers'
 import { adminRouter } from './routes/admin'
 import { pricingRouter } from './routes/pricing'
 import { uploadRouter } from './routes/upload'
-import { webhookRouter } from './routes/webhook'
 import { usersRouter } from './routes/users'
+import { authRouter } from './routes/auth'
 import { authMiddleware } from './middleware/auth'
 
 export type Env = {
@@ -25,40 +25,31 @@ export type Env = {
   CLERK_WEBHOOK_SECRET: string
   JWT_SECRET: string
   NODE_ENV: string
-  ALLOWED_ORIGINS?: string  // comma-separated list of allowed origins
+  ALLOWED_ORIGINS?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()
 
-// Security headers
 app.use('*', secureHeaders({
   xFrameOptions: 'DENY',
   xContentTypeOptions: 'nosniff',
   referrerPolicy: 'strict-origin-when-cross-origin',
 }))
-
-// Logger
 app.use('*', logger())
 app.use('*', prettyJSON())
 
-// CORS - dynamic, supports production + Replit dev domains
 app.use('*', cors({
   origin: (origin, c) => {
-    // Allow configured origins (comma-separated env var)
     const configuredOrigins = c.env.ALLOWED_ORIGINS
       ? c.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
       : []
-
     const defaultOrigins = [
       'https://mandoubak.com',
       'https://www.mandoubak.com',
       'http://localhost:5000',
       'http://localhost:3000',
     ]
-
     const allowedOrigins = [...defaultOrigins, ...configuredOrigins]
-
-    // Allow Replit preview domains (*.replit.app, *.repl.co)
     if (
       !origin ||
       allowedOrigins.includes(origin) ||
@@ -68,40 +59,23 @@ app.use('*', cors({
     ) {
       return origin
     }
-
-    return null  // Block unknown origins
+    return null
   },
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true,
-  maxAge: 86400,  // 24 hours preflight cache
+  maxAge: 86400,
 }))
 
-// Rate limiting helper using KV
-async function checkRateLimit(
-  kv: KVNamespace,
-  key: string,
-  limit: number,
-  windowSecs: number
-): Promise<{ allowed: boolean; remaining: number }> {
-  const count = parseInt(await kv.get(`rl:${key}`) || '0')
-  if (count >= limit) return { allowed: false, remaining: 0 }
-  await kv.put(`rl:${key}`, String(count + 1), { expirationTtl: windowSecs })
-  return { allowed: true, remaining: limit - count - 1 }
-}
-
-// Health check
-app.get('/', (c) => c.json({ 
-  status: 'ok', 
-  app: 'مندوبك API', 
-  version: '1.0.0',
-  timestamp: new Date().toISOString()
+app.get('/', (c) => c.json({
+  status: 'ok',
+  app: 'مندوبك API',
+  version: '2.0.0',
+  timestamp: new Date().toISOString(),
 }))
 
-// Webhooks - public (verified by signature)
-app.route('/api/webhooks', webhookRouter)
-
-// Public routes (rate limited)
+// Public routes - no auth required
+app.route('/api/auth', authRouter)
 app.route('/api/pricing', pricingRouter)
 app.route('/api/upload', uploadRouter)
 
@@ -116,10 +90,27 @@ app.route('/api/couriers', couriersRouter)
 app.route('/api/admin', adminRouter)
 app.route('/api/users', usersRouter)
 
-// 404 handler
-app.notFound((c) => c.json({ error: 'المسار مش موجود' }, 404))
+// Security alerts (public write, admin read handled inside adminRouter)
+app.post('/api/security/alert', async (c) => {
+  try {
+    const body = await c.req.json()
+    const supabaseUrl = c.env.SUPABASE_URL
+    const supabaseKey = c.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!supabaseUrl || !supabaseKey) return c.json({ ok: true })
 
-// Error handler - never leak internal errors
+    const { getSupabaseClient } = await import('./lib/supabase')
+    const supabase = getSupabaseClient(supabaseUrl, supabaseKey)
+    await supabase.from('security_alerts').insert({
+      type: 'failed_admin_login',
+      ip_address: c.req.header('x-forwarded-for') || 'unknown',
+      user_agent: c.req.header('user-agent') || 'unknown',
+      details: body,
+    })
+  } catch { /* silent */ }
+  return c.json({ ok: true })
+})
+
+app.notFound((c) => c.json({ error: 'المسار مش موجود' }, 404))
 app.onError((err, c) => {
   const isDev = c.env?.NODE_ENV === 'development'
   console.error('Server error:', err)
@@ -129,5 +120,4 @@ app.onError((err, c) => {
   }, 500)
 })
 
-export { checkRateLimit }
 export default app

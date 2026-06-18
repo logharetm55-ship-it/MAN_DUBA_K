@@ -1,9 +1,9 @@
 // =============================================================
-// Auth Middleware - Clerk Token Verification
+// Auth Middleware - Custom JWT (بدون Clerk)
 // =============================================================
 
 import { createMiddleware } from 'hono/factory'
-import { createClerkClient } from '@clerk/backend'
+import { verifyJWT } from '../lib/jwt-utils'
 import type { Env } from '../index'
 
 export type AuthUser = {
@@ -21,7 +21,7 @@ declare module 'hono' {
 
 export const authMiddleware = createMiddleware<{ Bindings: Env }>(async (c, next) => {
   const authHeader = c.req.header('Authorization')
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return c.json({ error: 'مش مسجل دخول' }, 401)
   }
@@ -29,37 +29,35 @@ export const authMiddleware = createMiddleware<{ Bindings: Env }>(async (c, next
   const token = authHeader.split(' ')[1]
 
   try {
-    const clerk = createClerkClient({ secretKey: c.env.CLERK_SECRET_KEY })
-    const payload = await clerk.verifyToken(token)
-    
-    // جيب role اليوزر من Supabase
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
-    
-    const { data: user } = await supabase
-      .from('users')
-      .select('id, role, phone')
-      .eq('clerk_id', payload.sub)
-      .single()
+    const secret = c.env.JWT_SECRET || 'mandoubak-jwt-secret-2024'
+    const payload = await verifyJWT(token, secret)
 
-    if (!user) {
-      return c.json({ error: 'اليوزر مش موجود' }, 401)
+    if (!payload) {
+      return c.json({ error: 'التوكن منتهي أو غلط — سجّل دخول تاني' }, 401)
+    }
+
+    const userId = String(payload.userId || '')
+    const role = String(payload.role || 'CLIENT') as AuthUser['role']
+    const phone = String(payload.phone || '')
+
+    if (!userId) {
+      return c.json({ error: 'بيانات التوكن غير مكتملة' }, 401)
     }
 
     c.set('user', {
-      userId: user.id,
-      clerkId: payload.sub,
-      role: user.role,
-      phone: user.phone,
+      userId,
+      clerkId: userId,
+      role,
+      phone,
     })
 
     await next()
   } catch (err) {
-    return c.json({ error: 'التوكن مش صحيح' }, 401)
+    return c.json({ error: 'خطأ في التحقق من الهوية' }, 401)
   }
 })
 
-export const requireRole = (...roles: AuthUser['role'][]) => 
+export const requireRole = (...roles: AuthUser['role'][]) =>
   createMiddleware<{ Bindings: Env }>(async (c, next) => {
     const user = c.get('user')
     if (!roles.includes(user.role)) {

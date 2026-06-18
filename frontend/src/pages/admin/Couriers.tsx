@@ -1,6 +1,11 @@
-import { useState } from 'react'
+// =============================================================
+// Admin Couriers - إدارة المناديب (بيانات حقيقية)
+// =============================================================
+
+import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import { Truck, CheckCircle, XCircle, Clock, Star, Phone, MapPin } from 'lucide-react'
+import { Truck, CheckCircle, XCircle, Clock, Star, Phone, MapPin, Loader2, RefreshCw } from 'lucide-react'
+import { useAuth } from '../../lib/auth-context'
 
 interface Courier {
   id: string
@@ -10,10 +15,10 @@ interface Courier {
   status: string
   rating: number
   total_deliveries: number
+  is_online: boolean
   id_front_image_url: string
   id_back_image_url: string
   created_at: string
-  users?: { email: string }
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -24,18 +29,55 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 }
 
 export default function AdminCouriers() {
-  const [couriers, setCouriers] = useState<Courier[]>(DEMO_COURIERS)
-  const [loading, setLoading] = useState(false)
+  const { token } = useAuth()
+  const [couriers, setCouriers] = useState<Courier[]>([])
+  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>('all')
   const [updating, setUpdating] = useState<string | null>(null)
 
-  function updateStatus(courierId: string, status: string) {
+  useEffect(() => { loadCouriers() }, [])
+
+  async function loadCouriers() {
+    if (!token) return
+    setLoading(true)
+    try {
+      const res = await fetch('/api/admin/couriers', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setCouriers(data.couriers || [])
+      } else {
+        toast.error('مقدرناش نجيب المناديب')
+      }
+    } catch {
+      toast.error('مشكلة في الاتصال')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function updateStatus(courierId: string, status: string) {
+    if (!token) return
     setUpdating(courierId)
-    setTimeout(() => {
-      toast.success(status === 'APPROVED' ? '✅ تم الموافقة على المندوب' : status === 'REJECTED' ? '❌ تم رفض المندوب' : '⛔ تم إيقاف المندوب')
-      setCouriers(couriers.map(c => c.id === courierId ? { ...c, status } : c))
+    try {
+      const res = await fetch(`/api/admin/couriers/${courierId}/approve`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status }),
+      })
+      if (res.ok) {
+        toast.success(status === 'APPROVED' ? '✅ تم الموافقة على المندوب' :
+          status === 'REJECTED' ? '❌ تم رفض المندوب' : '⛔ تم إيقاف المندوب')
+        setCouriers(couriers.map(c => c.id === courierId ? { ...c, status } : c))
+      } else {
+        toast.error('فشل التحديث')
+      }
+    } catch {
+      toast.error('مشكلة في الاتصال')
+    } finally {
       setUpdating(null)
-    }, 400)
+    }
   }
 
   const filtered = filter === 'all' ? couriers : couriers.filter(c => c.status === filter)
@@ -43,32 +85,34 @@ export default function AdminCouriers() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Truck className="text-orange-500" size={28} />
-        <div>
-          <h1 className="text-2xl font-black">إدارة المناديب</h1>
-          {pendingCount > 0 && (
-            <p className="text-yellow-600 text-sm font-semibold">{pendingCount} مندوب ينتظر الموافقة ⏳</p>
-          )}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Truck className="text-orange-500" size={28} />
+          <div>
+            <h1 className="text-2xl font-black">إدارة المناديب</h1>
+            {pendingCount > 0 && (
+              <p className="text-yellow-600 text-sm font-semibold">{pendingCount} مندوب ينتظر الموافقة ⏳</p>
+            )}
+          </div>
         </div>
+        <button onClick={loadCouriers} className="p-2 hover:bg-gray-100 rounded-xl transition-colors" title="تحديث">
+          <RefreshCw size={20} className={`text-gray-500 ${loading ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {/* Filter Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto">
         {[
           { key: 'all', label: `الكل (${couriers.length})` },
-          { key: 'PENDING_REVIEW', label: `منتظر (${couriers.filter(c => c.status === 'PENDING_REVIEW').length})` },
+          { key: 'PENDING_REVIEW', label: `ينتظر (${couriers.filter(c => c.status === 'PENDING_REVIEW').length})` },
           { key: 'APPROVED', label: `معتمد (${couriers.filter(c => c.status === 'APPROVED').length})` },
           { key: 'REJECTED', label: `مرفوض (${couriers.filter(c => c.status === 'REJECTED').length})` },
+          { key: 'SUSPENDED', label: `موقوف (${couriers.filter(c => c.status === 'SUSPENDED').length})` },
         ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setFilter(tab.key)}
+          <button key={tab.key} onClick={() => setFilter(tab.key)}
             className={`flex-shrink-0 px-3 py-2 rounded-lg font-bold text-xs transition-all ${
               filter === tab.key ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-600'
-            }`}
-          >
+            }`}>
             {tab.label}
           </button>
         ))}
@@ -77,22 +121,31 @@ export default function AdminCouriers() {
       {/* Couriers List */}
       {loading ? (
         Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="card animate-pulse h-24" />
+          <div key={i} className="card animate-pulse h-32 bg-gray-100" />
         ))
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <Truck size={48} className="mx-auto mb-3 opacity-30" />
           <p>مفيش مناديب في هذه الفئة</p>
+          {couriers.length === 0 && (
+            <p className="text-sm mt-2">لو فيه خطأ في الاتصال، تأكد من الـ backend</p>
+          )}
         </div>
       ) : (
         filtered.map(courier => {
-          const statusConfig = STATUS_CONFIG[courier.status]
+          const sc = STATUS_CONFIG[courier.status] || STATUS_CONFIG.PENDING_REVIEW
+          const isUpdating = updating === courier.id
           return (
             <div key={courier.id} className="card">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <span className="text-orange-600 font-black text-lg">{courier.name[0]}</span>
+                  <div className="relative">
+                    <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <span className="text-orange-600 font-black text-lg">{courier.name[0]}</span>
+                    </div>
+                    {courier.is_online && (
+                      <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full" />
+                    )}
                   </div>
                   <div>
                     <h3 className="font-bold">{courier.name}</h3>
@@ -100,10 +153,16 @@ export default function AdminCouriers() {
                       <Phone size={12} />
                       <span dir="ltr">{courier.phone}</span>
                     </div>
+                    {courier.address && (
+                      <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+                        <MapPin size={11} />
+                        <span>{courier.address.slice(0, 40)}{courier.address.length > 40 ? '...' : ''}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <span className={`text-xs font-bold px-2 py-1 rounded-full ${statusConfig.bg} ${statusConfig.color}`}>
-                  {statusConfig.label}
+                <span className={`text-xs font-bold px-2 py-1 rounded-full ${sc.bg} ${sc.color}`}>
+                  {sc.label}
                 </span>
               </div>
 
@@ -120,40 +179,44 @@ export default function AdminCouriers() {
                   <Clock size={12} />
                   {new Date(courier.created_at).toLocaleDateString('ar-EG')}
                 </div>
+                {courier.is_online && (
+                  <span className="text-green-600 font-semibold">● متصل الآن</span>
+                )}
               </div>
 
+              {/* ID Images Status */}
               {courier.status === 'PENDING_REVIEW' && (
                 <div className="mt-4 space-y-3">
-                  {/* Show ID images */}
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-gray-100 rounded-xl p-2 text-center text-xs text-gray-500">
+                    <div className={`rounded-xl p-2 text-center text-xs ${courier.id_front_image_url ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                       🪪 وجه البطاقة
-                      <div className="text-xs text-gray-400 mt-1">
-                        {courier.id_front_image_url ? '✅ مرفوع' : '❌ مش موجود'}
+                      <div className="mt-1 font-bold">
+                        {courier.id_front_image_url ? '✅ مرفوع' : '❌ غير مرفوع'}
                       </div>
                     </div>
-                    <div className="bg-gray-100 rounded-xl p-2 text-center text-xs text-gray-500">
+                    <div className={`rounded-xl p-2 text-center text-xs ${courier.id_back_image_url ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                       🪪 ضهر البطاقة
-                      <div className="text-xs text-gray-400 mt-1">
-                        {courier.id_back_image_url ? '✅ مرفوع' : '❌ مش موجود'}
+                      <div className="mt-1 font-bold">
+                        {courier.id_back_image_url ? '✅ مرفوع' : '❌ غير مرفوع'}
                       </div>
                     </div>
                   </div>
+
+                  {!courier.id_front_image_url || !courier.id_back_image_url ? (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700 text-center">
+                      ⚠️ صور البطاقة ناقصة — ارفضه وخليه يكمل التسجيل
+                    </div>
+                  ) : null}
+
                   <div className="flex gap-2">
-                    <button
-                      disabled={updating === courier.id}
-                      onClick={() => updateStatus(courier.id, 'APPROVED')}
-                      className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-1 transition-all"
-                    >
-                      <CheckCircle size={16} />
+                    <button disabled={isUpdating} onClick={() => updateStatus(courier.id, 'APPROVED')}
+                      className="flex-1 bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-1 transition-all">
+                      {isUpdating ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
                       موافقة
                     </button>
-                    <button
-                      disabled={updating === courier.id}
-                      onClick={() => updateStatus(courier.id, 'REJECTED')}
-                      className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-1 transition-all"
-                    >
-                      <XCircle size={16} />
+                    <button disabled={isUpdating} onClick={() => updateStatus(courier.id, 'REJECTED')}
+                      className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-1 transition-all">
+                      {isUpdating ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
                       رفض
                     </button>
                   </div>
@@ -161,22 +224,25 @@ export default function AdminCouriers() {
               )}
 
               {courier.status === 'APPROVED' && (
-                <button
-                  disabled={updating === courier.id}
-                  onClick={() => updateStatus(courier.id, 'SUSPENDED')}
-                  className="mt-3 w-full bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 font-bold py-2 rounded-xl text-sm transition-all"
-                >
+                <button disabled={isUpdating} onClick={() => updateStatus(courier.id, 'SUSPENDED')}
+                  className="mt-3 w-full bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 font-bold py-2 rounded-xl text-sm transition-all flex items-center justify-center gap-2">
+                  {isUpdating ? <Loader2 size={16} className="animate-spin" /> : null}
                   إيقاف المندوب
                 </button>
               )}
 
               {courier.status === 'SUSPENDED' && (
-                <button
-                  disabled={updating === courier.id}
-                  onClick={() => updateStatus(courier.id, 'APPROVED')}
-                  className="mt-3 w-full bg-green-100 hover:bg-green-200 text-green-700 font-bold py-2 rounded-xl text-sm transition-all"
-                >
+                <button disabled={isUpdating} onClick={() => updateStatus(courier.id, 'APPROVED')}
+                  className="mt-3 w-full bg-green-100 hover:bg-green-200 text-green-700 font-bold py-2 rounded-xl text-sm transition-all flex items-center justify-center gap-2">
+                  {isUpdating ? <Loader2 size={16} className="animate-spin" /> : null}
                   إعادة التفعيل
+                </button>
+              )}
+
+              {courier.status === 'REJECTED' && (
+                <button disabled={isUpdating} onClick={() => updateStatus(courier.id, 'PENDING_REVIEW')}
+                  className="mt-3 w-full bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold py-2 rounded-xl text-sm transition-all">
+                  إعادة للمراجعة
                 </button>
               )}
             </div>
@@ -186,24 +252,3 @@ export default function AdminCouriers() {
     </div>
   )
 }
-
-const DEMO_COURIERS: Courier[] = [
-  {
-    id: '1', name: 'أحمد محمد', phone: '01012345678', address: 'شارع التحرير',
-    status: 'PENDING_REVIEW', rating: 0, total_deliveries: 0,
-    id_front_image_url: 'demo-key', id_back_image_url: 'demo-key',
-    created_at: new Date(Date.now() - 3600000).toISOString(),
-  },
-  {
-    id: '2', name: 'محمود علي', phone: '01234567890', address: 'الجيزة',
-    status: 'APPROVED', rating: 4.7, total_deliveries: 89,
-    id_front_image_url: 'demo-key', id_back_image_url: 'demo-key',
-    created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
-  },
-  {
-    id: '3', name: 'كريم سمير', phone: '01098765432', address: 'مدينة نصر',
-    status: 'APPROVED', rating: 4.9, total_deliveries: 214,
-    id_front_image_url: 'demo-key', id_back_image_url: 'demo-key',
-    created_at: new Date(Date.now() - 86400000 * 60).toISOString(),
-  },
-]

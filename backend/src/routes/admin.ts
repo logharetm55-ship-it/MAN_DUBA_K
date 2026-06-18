@@ -10,30 +10,35 @@ import { requireRole } from '../middleware/auth'
 
 export const adminRouter = new Hono<{ Bindings: Env }>()
 
-// كل الـ routes دي للأدمن بس
 adminRouter.use('*', requireRole('ADMIN'))
 
 // =====================
-// GET /admin/dashboard - إحصائيات عامة
+// GET /admin/dashboard
 // =====================
 adminRouter.get('/dashboard', async (c) => {
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
-  const [ordersStats, couriersStats, adsStats, revenueStats] = await Promise.all([
-    supabase.from('orders').select('status', { count: 'exact' }),
-    supabase.from('couriers').select('status', { count: 'exact' }),
+  const [ordersRes, couriersRes, adsRes, revenueRes, clientsRes] = await Promise.all([
+    supabase.from('orders').select('status'),
+    supabase.from('couriers').select('status'),
     supabase.from('ad_offers').select('is_active, click_count'),
-    supabase.from('orders')
-      .select('delivery_fee')
-      .eq('status', 'DELIVERED'),
+    supabase.from('orders').select('delivery_fee').eq('status', 'DELIVERED'),
+    supabase.from('users').select('role, last_seen_at').eq('role', 'CLIENT'),
   ])
 
-  const orders = ordersStats.data || []
-  const couriers = couriersStats.data || []
-  const ads = adsStats.data || []
-  const revenue = revenueStats.data || []
+  const orders = ordersRes.data || []
+  const couriers = couriersRes.data || []
+  const ads = adsRes.data || []
+  const revenue = revenueRes.data || []
+  const clients = clientsRes.data || []
+
+  const now = Date.now()
+  const fifteenMinutesAgo = now - 15 * 60 * 1000
 
   const totalRevenue = revenue.reduce((sum, o) => sum + (o.delivery_fee || 0), 0)
+  const activeClients = clients.filter(u =>
+    u.last_seen_at && new Date(u.last_seen_at).getTime() > fifteenMinutesAgo
+  ).length
 
   return c.json({
     success: true,
@@ -51,6 +56,10 @@ adminRouter.get('/dashboard', async (c) => {
         pending: couriers.filter(c => c.status === 'PENDING_REVIEW').length,
         suspended: couriers.filter(c => c.status === 'SUSPENDED').length,
       },
+      clients: {
+        total: clients.length,
+        activeNow: activeClients,
+      },
       ads: {
         total: ads.length,
         active: ads.filter(a => a.is_active).length,
@@ -60,18 +69,16 @@ adminRouter.get('/dashboard', async (c) => {
         total: Math.round(totalRevenue * 100) / 100,
         currency: 'EGP',
       },
-    }
+    },
   })
 })
 
 // =====================
-// GET /admin/couriers - كل المناديب
+// GET /admin/couriers
 // =====================
 adminRouter.get('/couriers', async (c) => {
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
   const status = c.req.query('status')
-
-  // Validate status param
   const validStatuses = ['PENDING_REVIEW', 'APPROVED', 'REJECTED', 'SUSPENDED']
   if (status && !validStatuses.includes(status)) {
     return c.json({ error: 'حالة غير صحيحة' }, 400)
@@ -79,36 +86,27 @@ adminRouter.get('/couriers', async (c) => {
 
   let query = supabase
     .from('couriers')
-    .select('id, name, phone, address, status, rating, total_deliveries, is_online, created_at, users(email, clerk_id)')
+    .select('id, name, phone, address, status, rating, total_deliveries, is_online, id_front_image_url, id_back_image_url, created_at, users(name, phone, address, last_seen_at)')
     .order('created_at', { ascending: false })
 
-  if (status) {
-    query = query.eq('status', status)
-  }
+  if (status) query = query.eq('status', status)
 
   const { data, error } = await query
-
-  if (error) {
-    return c.json({ error: 'مقدرناش نجيب المناديب' }, 500)
-  }
-
+  if (error) return c.json({ error: 'مقدرناش نجيب المناديب' }, 500)
   return c.json({ success: true, couriers: data || [] })
 })
 
 // =====================
-// PATCH /admin/couriers/:id/approve - الموافقة/الرفض على مندوب
+// PATCH /admin/couriers/:id/approve
 // =====================
 adminRouter.patch('/couriers/:id/approve', async (c) => {
   const courierId = c.req.param('id')
-
-  if (!courierId || courierId.length > 30) {
+  if (!courierId || courierId.length > 50) {
     return c.json({ error: 'معرّف مندوب غير صحيح' }, 400)
   }
 
   let body: unknown
-  try {
-    body = await c.req.json()
-  } catch {
+  try { body = await c.req.json() } catch {
     return c.json({ error: 'بيانات غير صحيحة' }, 400)
   }
 
@@ -116,11 +114,8 @@ adminRouter.patch('/couriers/:id/approve', async (c) => {
     status: z.enum(['APPROVED', 'REJECTED', 'SUSPENDED']),
     reason: z.string().max(500).optional(),
   })
-
   const parsed = schema.safeParse(body)
-  if (!parsed.success) {
-    return c.json({ error: 'حالة غير صحيحة', details: parsed.error.flatten() }, 400)
-  }
+  if (!parsed.success) return c.json({ error: 'حالة غير صحيحة' }, 400)
 
   const { status } = parsed.data
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
@@ -130,9 +125,7 @@ adminRouter.patch('/couriers/:id/approve', async (c) => {
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', courierId)
 
-  if (error) {
-    return c.json({ error: 'مقدرناش نحدث الحالة' }, 500)
-  }
+  if (error) return c.json({ error: 'مقدرناش نحدث الحالة' }, 500)
 
   return c.json({
     success: true,
@@ -140,12 +133,37 @@ adminRouter.patch('/couriers/:id/approve', async (c) => {
       ? 'تم الموافقة على المندوب'
       : status === 'REJECTED'
       ? 'تم رفض المندوب'
-      : 'تم إيقاف المندوب'
+      : 'تم إيقاف المندوب',
   })
 })
 
 // =====================
-// GET /admin/orders - كل الأوردرات
+// GET /admin/clients - كل العملاء
+// =====================
+adminRouter.get('/clients', async (c) => {
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const now = Date.now()
+  const fifteenMinutesAgo = new Date(now - 15 * 60 * 1000).toISOString()
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, phone, address, last_seen_at, created_at')
+    .eq('role', 'CLIENT')
+    .order('last_seen_at', { ascending: false, nullsFirst: false })
+    .limit(200)
+
+  if (error) return c.json({ error: 'مقدرناش نجيب العملاء' }, 500)
+
+  const clients = (data || []).map(u => ({
+    ...u,
+    isActiveNow: u.last_seen_at ? u.last_seen_at > fifteenMinutesAgo : false,
+  }))
+
+  return c.json({ success: true, clients })
+})
+
+// =====================
+// GET /admin/orders
 // =====================
 adminRouter.get('/orders', async (c) => {
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
@@ -163,44 +181,57 @@ adminRouter.get('/orders', async (c) => {
   let query = supabase
     .from('orders')
     .select(`
-      id, order_number, type, status, delivery_fee, distance_km,
-      pickup_details, delivery_details, notes, created_at, accepted_at, completed_at,
+      id, order_number, type, status, delivery_fee, distance_km, num_shops,
+      pickup_details, delivery_details, recipient_phone, notes, created_at, accepted_at, completed_at,
       order_items(name, quantity, price, shop_name),
       couriers(name, phone),
-      users!orders_client_id_fkey(email)
+      users!orders_client_id_fkey(name, phone)
     `, { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 
-  if (status) {
-    query = query.eq('status', status)
-  }
+  if (status) query = query.eq('status', status)
 
   const { data, error, count } = await query
-
-  if (error) {
-    return c.json({ error: 'مقدرناش نجيب الأوردرات' }, 500)
-  }
+  if (error) return c.json({ error: 'مقدرناش نجيب الأوردرات' }, 500)
 
   return c.json({
     success: true,
     orders: data || [],
-    pagination: {
-      page,
-      limit,
-      total: count || 0,
-      pages: Math.ceil((count || 0) / limit)
-    }
+    pagination: { page, limit, total: count || 0, pages: Math.ceil((count || 0) / limit) },
   })
 })
 
 // =====================
-// Pricing Management - إدارة الأسعار
+// GET /admin/security-alerts
+// =====================
+adminRouter.get('/security-alerts', async (c) => {
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const { data, error } = await supabase
+    .from('security_alerts')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (error) return c.json({ success: true, alerts: [] })
+  return c.json({ success: true, alerts: data || [] })
+})
+
+// =====================
+// POST /admin/security-alerts/mark-read
+// =====================
+adminRouter.post('/security-alerts/mark-read', async (c) => {
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  await supabase.from('security_alerts').update({ is_read: true }).eq('is_read', false)
+  return c.json({ success: true })
+})
+
+// =====================
+// Pricing Management
 // =====================
 adminRouter.get('/pricing', async (c) => {
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
   const { data, error } = await supabase.from('admin_pricing').select('*').order('zone')
-
   if (error) return c.json({ error: 'مقدرناش نجيب الأسعار' }, 500)
   return c.json({ success: true, pricing: data || [] })
 })
@@ -210,24 +241,20 @@ const pricingSchema = z.object({
   pricePerKm: z.number().positive().max(1000),
   minimumFee: z.number().positive().max(10000),
   maximumFee: z.number().positive().max(10000).optional(),
+  pricePerShop: z.number().positive().max(1000).optional(),
+  baseFeeShoppping: z.number().positive().max(10000).optional(),
   isActive: z.boolean().default(true),
 })
 
 adminRouter.post('/pricing', async (c) => {
   let body: unknown
-  try {
-    body = await c.req.json()
-  } catch {
+  try { body = await c.req.json() } catch {
     return c.json({ error: 'بيانات غير صحيحة' }, 400)
   }
-
   const parsed = pricingSchema.safeParse(body)
-  if (!parsed.success) {
-    return c.json({ error: 'بيانات غلط', details: parsed.error.flatten() }, 400)
-  }
+  if (!parsed.success) return c.json({ error: 'بيانات غلط', details: parsed.error.flatten() }, 400)
 
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
-
   const { data, error } = await supabase
     .from('admin_pricing')
     .upsert({
@@ -235,17 +262,18 @@ adminRouter.post('/pricing', async (c) => {
       price_per_km: parsed.data.pricePerKm,
       minimum_fee: parsed.data.minimumFee,
       maximum_fee: parsed.data.maximumFee,
+      price_per_shop: parsed.data.pricePerShop ?? 5,
+      base_fee_shopping: parsed.data.baseFeeShoppping ?? 15,
       is_active: parsed.data.isActive,
     }, { onConflict: 'zone' })
-    .select()
-    .single()
+    .select().single()
 
   if (error) return c.json({ error: 'مقدرناش نحفظ السعر' }, 500)
   return c.json({ success: true, pricing: data })
 })
 
 // =====================
-// Ads/Offers Management - إدارة العروض
+// Ads Management
 // =====================
 adminRouter.get('/ads', async (c) => {
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
@@ -253,7 +281,6 @@ adminRouter.get('/ads', async (c) => {
     .from('ad_offers')
     .select('id, title, description, image_url, shop_name, product_name, product_price, is_active, click_count, start_date, end_date, created_at')
     .order('created_at', { ascending: false })
-
   if (error) return c.json({ error: 'مقدرناش نجيب العروض' }, 500)
   return c.json({ success: true, ads: data || [] })
 })
@@ -274,127 +301,62 @@ const adSchema = z.object({
 
 adminRouter.post('/ads', async (c) => {
   let body: unknown
-  try {
-    body = await c.req.json()
-  } catch {
+  try { body = await c.req.json() } catch {
     return c.json({ error: 'بيانات غير صحيحة' }, 400)
   }
-
   const parsed = adSchema.safeParse(body)
-  if (!parsed.success) {
-    return c.json({ error: 'بيانات العرض غلط', details: parsed.error.flatten() }, 400)
-  }
-
-  // Validate date range
+  if (!parsed.success) return c.json({ error: 'بيانات العرض غلط', details: parsed.error.flatten() }, 400)
   if (new Date(parsed.data.endDate) <= new Date(parsed.data.startDate)) {
     return c.json({ error: 'تاريخ الانتهاء لازم يكون بعد تاريخ البداية' }, 400)
   }
 
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
-
-  const { data, error } = await supabase
-    .from('ad_offers')
-    .insert({
-      title: parsed.data.title,
-      description: parsed.data.description,
-      image_url: parsed.data.imageUrl,
-      shop_name: parsed.data.shopName,
-      shop_address: parsed.data.shopAddress,
-      shop_lat: parsed.data.shopLat,
-      shop_lng: parsed.data.shopLng,
-      product_name: parsed.data.productName,
-      product_price: parsed.data.productPrice,
-      start_date: parsed.data.startDate,
-      end_date: parsed.data.endDate,
-      is_active: true,
-    })
-    .select()
-    .single()
+  const { data, error } = await supabase.from('ad_offers').insert({
+    title: parsed.data.title, description: parsed.data.description,
+    image_url: parsed.data.imageUrl, shop_name: parsed.data.shopName,
+    shop_address: parsed.data.shopAddress, shop_lat: parsed.data.shopLat,
+    shop_lng: parsed.data.shopLng, product_name: parsed.data.productName,
+    product_price: parsed.data.productPrice, start_date: parsed.data.startDate,
+    end_date: parsed.data.endDate, is_active: true,
+  }).select().single()
 
   if (error) return c.json({ error: 'مقدرناش ننشر العرض' }, 500)
   return c.json({ success: true, ad: data }, 201)
 })
 
-// PATCH /admin/ads/:id - تعديل عرض (fields محددة بس)
-const adUpdateSchema = z.object({
-  title: z.string().min(5).max(200).optional(),
-  description: z.string().max(1000).optional(),
-  imageUrl: z.string().url().max(2000).optional(),
-  shopName: z.string().min(3).max(200).optional(),
-  shopAddress: z.string().min(10).max(500).optional(),
-  shopLat: z.number().min(-90).max(90).optional(),
-  shopLng: z.number().min(-180).max(180).optional(),
-  productName: z.string().min(3).max(200).optional(),
-  productPrice: z.number().positive().max(100000).optional(),
-  startDate: z.string().datetime().optional(),
-  endDate: z.string().datetime().optional(),
-  isActive: z.boolean().optional(),
-}).strict()  // رفض أي fields زيادة
-
 adminRouter.patch('/ads/:id', async (c) => {
   const adId = c.req.param('id')
-
-  if (!adId || adId.length > 30) {
-    return c.json({ error: 'معرّف إعلان غير صحيح' }, 400)
-  }
+  if (!adId || adId.length > 50) return c.json({ error: 'معرّف إعلان غير صحيح' }, 400)
 
   let body: unknown
-  try {
-    body = await c.req.json()
-  } catch {
+  try { body = await c.req.json() } catch {
     return c.json({ error: 'بيانات غير صحيحة' }, 400)
   }
 
-  const parsed = adUpdateSchema.safeParse(body)
-  if (!parsed.success) {
-    return c.json({ error: 'بيانات غير صحيحة', details: parsed.error.flatten() }, 400)
-  }
-
-  if (Object.keys(parsed.data).length === 0) {
-    return c.json({ error: 'مفيش بيانات للتحديث' }, 400)
-  }
+  const schema = z.object({
+    title: z.string().min(5).max(200).optional(),
+    isActive: z.boolean().optional(),
+    productPrice: z.number().positive().optional(),
+  })
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) return c.json({ error: 'بيانات غير صحيحة' }, 400)
 
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
-
-  // Map camelCase to snake_case explicitly (no raw spread)
   const dbUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (parsed.data.title !== undefined) dbUpdates.title = parsed.data.title
-  if (parsed.data.description !== undefined) dbUpdates.description = parsed.data.description
-  if (parsed.data.imageUrl !== undefined) dbUpdates.image_url = parsed.data.imageUrl
-  if (parsed.data.shopName !== undefined) dbUpdates.shop_name = parsed.data.shopName
-  if (parsed.data.shopAddress !== undefined) dbUpdates.shop_address = parsed.data.shopAddress
-  if (parsed.data.shopLat !== undefined) dbUpdates.shop_lat = parsed.data.shopLat
-  if (parsed.data.shopLng !== undefined) dbUpdates.shop_lng = parsed.data.shopLng
-  if (parsed.data.productName !== undefined) dbUpdates.product_name = parsed.data.productName
-  if (parsed.data.productPrice !== undefined) dbUpdates.product_price = parsed.data.productPrice
-  if (parsed.data.startDate !== undefined) dbUpdates.start_date = parsed.data.startDate
-  if (parsed.data.endDate !== undefined) dbUpdates.end_date = parsed.data.endDate
   if (parsed.data.isActive !== undefined) dbUpdates.is_active = parsed.data.isActive
+  if (parsed.data.productPrice !== undefined) dbUpdates.product_price = parsed.data.productPrice
 
-  const { error } = await supabase
-    .from('ad_offers')
-    .update(dbUpdates)
-    .eq('id', adId)
-
+  const { error } = await supabase.from('ad_offers').update(dbUpdates).eq('id', adId)
   if (error) return c.json({ error: 'مقدرناش نحدث العرض' }, 500)
   return c.json({ success: true, message: 'تم التحديث' })
 })
 
-// DELETE /admin/ads/:id - حذف عرض
 adminRouter.delete('/ads/:id', async (c) => {
   const adId = c.req.param('id')
-
-  if (!adId || adId.length > 30) {
-    return c.json({ error: 'معرّف إعلان غير صحيح' }, 400)
-  }
-
+  if (!adId || adId.length > 50) return c.json({ error: 'معرّف إعلان غير صحيح' }, 400)
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
-
-  const { error } = await supabase
-    .from('ad_offers')
-    .delete()
-    .eq('id', adId)
-
+  const { error } = await supabase.from('ad_offers').delete().eq('id', adId)
   if (error) return c.json({ error: 'مقدرناش تحذف العرض' }, 500)
   return c.json({ success: true, message: 'تم حذف العرض' })
 })

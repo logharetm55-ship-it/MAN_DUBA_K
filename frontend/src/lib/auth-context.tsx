@@ -1,6 +1,5 @@
 // =============================================================
-// Auth Context - تسجيل مباشر (اسم + تليفون)
-// بدون Clerk - بيحفظ في Supabase + localStorage
+// Auth Context - تسجيل بالتليفون والباسورد
 // =============================================================
 
 import { createContext, useContext, useState, ReactNode } from 'react'
@@ -14,25 +13,29 @@ export interface AppUser {
   email: string | null
   role: UserRole
   avatar: string | null
+  address?: string | null
   onboarded?: boolean
+  courierStatus?: string | null
+  courierId?: string | null
 }
 
 export interface AuthContextType {
   user: AppUser | null
+  token: string | null
   role: UserRole
   isLoggedIn: boolean
   isLoading: boolean
   needsOnboarding: boolean
-  login: (user: AppUser) => void
+  login: (user: AppUser, token: string) => void
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
   updateRole: (role: UserRole) => void
-  // legacy demo compat
-  demoLogin?: (role: UserRole) => void
+  updateUser: (updates: Partial<AppUser>) => void
 }
 
 export const AuthContext = createContext<AuthContextType>({
   user: null,
+  token: null,
   role: null,
   isLoggedIn: false,
   isLoading: false,
@@ -41,9 +44,11 @@ export const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
   refreshUser: async () => {},
   updateRole: () => {},
+  updateUser: () => {},
 })
 
 const STORAGE_KEY = 'mandoubak_user'
+const TOKEN_KEY = 'mandoubak_token'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(() => {
@@ -53,14 +58,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch { return null }
   })
 
-  function login(appUser: AppUser) {
+  const [token, setToken] = useState<string | null>(() => {
+    try { return localStorage.getItem(TOKEN_KEY) } catch { return null }
+  })
+
+  function login(appUser: AppUser, jwt: string) {
     setUser(appUser)
+    setToken(jwt)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(appUser))
+    localStorage.setItem(TOKEN_KEY, jwt)
   }
 
   async function logout() {
     setUser(null)
+    setToken(null)
     localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(TOKEN_KEY)
   }
 
   function updateRole(role: UserRole) {
@@ -70,8 +83,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
   }
 
+  function updateUser(updates: Partial<AppUser>) {
+    if (!user) return
+    const updated = { ...user, ...updates }
+    setUser(updated)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+  }
+
   async function refreshUser() {
-    // إعادة قراءة من localStorage
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) setUser(JSON.parse(saved))
@@ -83,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user,
+      token,
       role: user?.role || null,
       isLoggedIn: !!user,
       isLoading: false,
@@ -91,10 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       refreshUser,
       updateRole,
-      demoLogin: (role) => {
-        if (!user || !role) return
-        updateRole(role)
-      },
+      updateUser,
     }}>
       {children}
     </AuthContext.Provider>

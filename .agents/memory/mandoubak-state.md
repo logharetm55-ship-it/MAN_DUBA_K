@@ -1,100 +1,69 @@
 ---
-name: Mandoubak Project State
-description: Full state of the Mandoubak delivery platform — what's built, architecture, and key decisions
+name: Mandoubak project state
+description: Complete delivery platform — custom JWT auth, real data, Arabic RTL UI, admin hidden page
 ---
 
-# All Pages Complete
+## Tech Stack
+- Frontend: React + Vite (port 5000), Tailwind CSS, RTL Arabic
+- Backend: Hono.js (port 8787), Supabase PostgreSQL
+- Auth: Custom JWT (PBKDF2 password hashing via Web Crypto API, no Clerk)
+- CSS utility classes: `.card`, `.btn-primary`, `.btn-secondary`, `.input`, `.input-field`
 
-## Client pages
-- `/` — HomePage with ads grid, hero, stats (real data from Supabase)
-- `/order` — 3-step order flow (type → addresses → confirm + price calc)
-- `/my-orders` — order list with filter tabs + rating modal
-- `/track/:id` — animated fake map + live order progress
-- `/notifications` — notification list + unread count
-- `/profile` — client profile (view/edit + stats)
+## Auth System (NO CLERK)
+- POST /api/auth/register — phone + password + role (CLIENT/COURIER) + address
+- POST /api/auth/login — phone + password → JWT
+- JWT stored in localStorage as `mandoubak_token`, user as `mandoubak_user`
+- JWT_SECRET defaults to 'mandoubak-jwt-secret-2024' if env not set
+- backend/src/lib/jwt-utils.ts — PBKDF2 hash + HS256 JWT (Web Crypto API, zero deps)
 
-## Courier pages
-- `/courier/register` — 3-step registration (info → ID upload → review)
-- `/courier/dashboard` — live order feed + accept with race condition simulation
-- `/courier/profile` — stats + ratings card
-- `/courier/earnings` — earnings dashboard with period selector (day/week/month/all)
+## Order Types (discriminated union in Zod)
+- SHOPPING: up to 4 shops max, priced by num_shops (base_fee + (shops-1) × price_per_shop)
+- DELIVERY: pickup/delivery addresses + phones, priced by distance (Haversine × price_per_km)
 
-## Admin pages
-- `/admin` — overview stats dashboard
-- `/admin/pricing` — pricing calculator config
-- `/admin/ads` — manage restaurant/vendor ads
-- `/admin/couriers` — approve/reject courier applications
+## Admin Access (HIDDEN)
+- URL: /admin-secret (AdminGuard component — must have role=admin in token)
+- Hidden entry: 6 clicks on the مندوبك logo → AdminLoginModal pops up
+- Credentials: username="sallam", password="255009" (frontend-only check in Layout.tsx)
+- 4 failed attempts → 30min localStorage lockout + POST /api/security/alert
+- Admin layout has nav tabs: Dashboard, Orders, Couriers, Clients, Pricing, Ads
+- /admin and /admin/* redirect to / (old paths hidden)
 
-## Auth (REAL CLERK + Demo Fallback)
-- `/login` — Smart: uses Clerk SignIn when VITE_CLERK_PUBLISHABLE_KEY set, Demo Mode otherwise
-- `lib/auth-context.tsx` — AuthContext + DemoAuthProvider + useAuth hook
-- `lib/clerk-auth-inner.tsx` — ClerkAuthProviderInner (uses useUser/useClerk/useAuth from @clerk/clerk-react)
-- `main.tsx` — wraps with ClerkProvider+ClerkAuthProviderInner or DemoAuthProvider based on key existence
+## Courier Flow
+1. Register via /login (register-courier mode) → creates user + courier record (PENDING_REVIEW)
+2. Navigate to /courier/register → upload ID card images (front + back via /api/upload)
+3. Admin reviews via /admin-secret/couriers → approve/reject/suspend
+4. Only APPROVED couriers see pending orders; 403 with courierStatus returned otherwise
 
-## Layout
-- Navbar: logo + desktop nav links + notification bell badge + user dropdown
-- BottomNav: mobile-only, role-aware (different tabs per role)
+## Key Frontend Files
+- `frontend/src/lib/auth-context.tsx` — token + user state, localStorage persistence
+- `frontend/src/pages/auth/Login.tsx` — 4 modes: welcome/login/register-client/register-courier
+- `frontend/src/components/Layout.tsx` — 6-click logo trick, AdminLoginModal, no admin link in nav
+- `frontend/src/App.tsx` — /admin-secret guarded routes + AdminLayout component
+- `frontend/src/pages/OrderPage.tsx` — SHOPPING (ShopCard × 4) + DELIVERY (A→B with phones)
+- `frontend/src/pages/admin/Dashboard.tsx` — real API stats
+- `frontend/src/pages/admin/Couriers.tsx` — real approve/reject/suspend
+- `frontend/src/pages/admin/Clients.tsx` — real client list with active status
+- `frontend/src/pages/admin/Orders.tsx` — real orders with pagination + filters
+- `frontend/src/pages/courier/Dashboard.tsx` — real API, NO demo data, 15s auto-refresh
+- `frontend/src/pages/courier/Register.tsx` — ID upload then review step
 
-# Backend (Hono.js + Node.js local, port 8787)
+## Key Backend Files
+- `backend/src/routes/auth.ts` — /api/auth/register + /api/auth/login
+- `backend/src/routes/orders.ts` — SHOPPING/DELIVERY creation + /pending + /accept
+- `backend/src/routes/admin.ts` — couriers, clients, orders, security-alerts, pricing, ads
+- `backend/src/middleware/auth.ts` — JWT verification + requireRole helper
 
-## Routes
-- `GET /api/pricing/calculate` — حساب سعر التوصيل بـ Haversine + zone detection
-- `GET /api/pricing/zones` — كل مناطق التسعير من DB
-- `POST /api/orders` — create order (CLIENT only, validated)
-- `GET /api/orders/pending` — pending orders (COURIER/ADMIN only, KV cached 3s)
-- `POST /api/orders/:id/accept` — accept order (KV lock + DB SELECT FOR UPDATE NOWAIT)
-- `GET /api/orders/my` — user's own orders
-- `PATCH /api/orders/:id/status` — update status (courier ownership checked)
-- `POST /api/couriers/register` — register courier
-- `GET /api/couriers/profile` — courier profile
-- `PATCH /api/couriers/online-status` — toggle availability
-- `POST /api/couriers/rate/:orderId` — rate a courier
-- `GET/POST /api/admin/pricing` — pricing management (ADMIN only)
-- `GET/POST/PATCH/DELETE /api/admin/ads` — ads management (ADMIN only)
-- `GET /api/admin/couriers` — list couriers
-- `PATCH /api/admin/couriers/:id/approve` — approve/reject
-- `GET /api/admin/orders` — all orders with pagination
-- `POST /api/upload/id` — upload ID card images (R2)
-- `GET /api/users/me` — current user profile (role from Supabase)
-- `PATCH /api/users/me` — update name/phone
-- `POST /api/webhooks/clerk` — Clerk webhook (user.created/updated/deleted → Supabase)
+## No Demo Data
+- All demo/fake orders removed from CourierDashboard (was DEMO_PENDING array)
+- All admin pages use real API calls
+- Courier Dashboard auto-refreshes every 15s from /api/orders/pending
 
-## Clerk Webhook
-- No svix package (peer dep conflict) — implemented manual HMAC-SHA256 verification using Node.js `crypto`
-- Spec: svix-id + svix-timestamp + svix-signature headers; signed content = `id.timestamp.body`
-- Secret format: `whsec_<base64>` (strip prefix before HMAC)
-- Soft deletes users (sets deleted_at) instead of hard delete
+## DB Schema additions (sql/password-auth-migration.sql)
+- users: password_hash, address, last_seen_at
+- orders: recipient_phone, num_shops
+- admin_pricing: price_per_shop, base_fee_shopping
+- security_alerts table: type, ip_address, user_agent, details, is_read
 
-## Supabase Setup (CRITICAL LESSONS)
-- **Zone names must match DB**: detectZone() returns Arabic ('القاهرة','الجيزة','default') — must match admin_pricing.zone column
-- **Node.js 20 WebSocket fix**: backend/src/lib/supabase.ts uses `import ws from 'ws'` with `realtime: { transport: ws }` in createClient
-- **All routes use getSupabaseClient()**: never call createClient() directly in routes — import from `lib/supabase.ts` singleton
-- **Grants required**: must run `GRANT USAGE ON SCHEMA public TO service_role, anon, authenticated` + `GRANT ALL ON ALL TABLES` to service_role, SELECT to anon
-- **VITE_ prefix**: frontend env vars must be VITE_SUPABASE_ANON_KEY and VITE_SUPABASE_URL — set via setEnvVars() not secrets
-- **Anon key validation**: frontend checks `anonKey.startsWith('eyJ')` before calling Supabase, falls back to demo data otherwise
-- **users table extra columns**: name, avatar_url, deleted_at must be added via sql/clerk-webhook-migration.sql
-
-## Database (Supabase PostgreSQL)
-- Project ref: klvceioawopljarpujnp
-- RLS on all 9 tables (users, couriers, customers, addresses, orders, order_items, admin_pricing, ad_offers, courier_ratings)
-- `accept_order()` function with SELECT FOR UPDATE NOWAIT (atomic, service_role only)
-- Trigger: `update_courier_avg_rating` auto-updates courier.rating
-- Seeded: 6 ad_offers + admin_pricing zones (default/القاهرة/الجيزة)
-
-## Onboarding Flow
-- New Clerk users arrive with `onboarded = false` in Supabase (set by webhook)
-- `clerk-auth-inner.tsx` exposes `needsOnboarding` in AuthContext
-- `OnboardingGuard` in `App.tsx` intercepts all routes and redirects to `/onboarding` if needed
-- `/onboarding` page: full-screen card picker (عميل / مندوب) → calls `POST /api/users/onboard`
-- After onboard: `onboarded = true`, role updated, redirect to correct dashboard
-- Demo users always have `onboarded: true` — guard is skipped for them
-- Onboarding outside Layout (no navbar/footer) — rendered directly in Routes above <Route element={<Layout/>}>
-
-## Key decisions
-**Why getSupabaseClient singleton:** prevents multiple RealtimeClient initializations per request
-**Why ws package:** Node.js 20 lacks native WebSocket
-**Why VITE_ env vars not secrets:** Vite build system only exposes VITE_-prefixed vars to frontend
-**Why fallback to demo data:** anon key validity check prevents crashes when key is misconfigured
-**Why manual HMAC for webhooks:** svix npm package has peer dep conflicts in this monorepo; Node crypto works identically
-**Why ClerkAuthProviderInner in separate file:** Vite ESM doesn't allow require(); Clerk hooks must be statically imported in a component only rendered inside ClerkProvider — separate file keeps DemoAuthProvider isolated
-**Why useAuth() for Clerk token:** In @clerk/clerk-react v5, getToken() is on the session via useAuth(), not on the UserResource object from useUser()
+## Why custom JWT instead of Clerk
+- Simpler for phone+password auth without Clerk phone verification setup
+- PBKDF2 is secure, no external JWT library needed (Web Crypto API)

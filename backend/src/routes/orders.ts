@@ -15,73 +15,67 @@ import {
   getCachedPendingOrders,
   invalidatePendingOrdersCache,
 } from '../lib/kv-lock'
-import { calculateDistance, calculateDeliveryFee, detectZone } from '../lib/pricing'
+import { calculateDistance, calculateDeliveryFee, calculateShoppingFee, detectZone } from '../lib/pricing'
 
 export const ordersRouter = new Hono<{ Bindings: Env }>()
 
 // =====================
 // Schema Validation
 // =====================
-const createOrderSchema = z.object({
-  type: z.enum(['SHOPPING', 'DELIVERY']),
-  pickupLat: z.number().min(-90).max(90),
-  pickupLng: z.number().min(-180).max(180),
-  deliveryLat: z.number().min(-90).max(90),
-  deliveryLng: z.number().min(-180).max(180),
-  pickupDetails: z.string().max(500).optional(),
-  deliveryDetails: z.string().max(500).optional(),
-  notes: z.string().max(1000).optional(),
+const shopItemSchema = z.object({
+  shopName: z.string().min(1).max(200),
+  shopAddress: z.string().max(500).optional(),
   items: z.array(z.object({
     name: z.string().min(1).max(200),
-    description: z.string().max(500).optional(),
     quantity: z.number().int().min(1).max(100).default(1),
     price: z.number().positive().optional(),
-    shopName: z.string().max(200).optional(),
-    shopAddress: z.string().max(500).optional(),
-  })).max(50).optional(),  // max 50 items per order
-  adOfferId: z.string().cuid().optional(),
+    description: z.string().max(500).optional(),
+  })).min(1).max(20),
 })
+
+const createOrderSchema = z.discriminatedUnion('type', [
+  // نوع 1: مشتريات من محلات (max 4 محلات)
+  z.object({
+    type: z.literal('SHOPPING'),
+    shops: z.array(shopItemSchema).min(1).max(4, 'أقصى عدد محلات في أوردر واحد هو 4'),
+    pickupLat: z.number().min(-90).max(90),
+    pickupLng: z.number().min(-180).max(180),
+    notes: z.string().max(1000).optional(),
+    clientAddress: z.string().max(500).optional(),
+  }),
+  // نوع 2: توصيل من مكان لمكان
+  z.object({
+    type: z.literal('DELIVERY'),
+    pickupAddress: z.string().min(5).max(500),
+    pickupPhone: z.string().regex(/^01[0-9]{9}$/, 'رقم تليفون الاستلام غلط'),
+    deliveryAddress: z.string().min(5).max(500),
+    deliveryPhone: z.string().regex(/^01[0-9]{9}$/, 'رقم تليفون التسليم غلط'),
+    pickupLat: z.number().min(-90).max(90),
+    pickupLng: z.number().min(-180).max(180),
+    deliveryLat: z.number().min(-90).max(90),
+    deliveryLng: z.number().min(-180).max(180),
+    notes: z.string().max(1000).optional(),
+  }),
+])
 
 // =====================
 // POST /orders - إنشاء أوردر جديد
 // =====================
-ordersRouter.post('/', async (c) => {
+ordersRouter.post('/', requireRole('CLIENT', 'ADMIN'), async (c) => {
   const user = c.get('user')
 
-  // Only clients can create orders
-  if (user.role !== 'CLIENT' && user.role !== 'ADMIN') {
-    return c.json({ error: 'العملاء بس اللي بيطلبوا' }, 403)
-  }
-
   let body: unknown
-  try {
-    body = await c.req.json()
-  } catch {
+  try { body = await c.req.json() } catch {
     return c.json({ error: 'بيانات JSON غير صحيحة' }, 400)
   }
 
   const parsed = createOrderSchema.safeParse(body)
   if (!parsed.success) {
-    return c.json({ error: 'بيانات غلط', details: parsed.error.flatten() }, 400)
-  }
-
-  const { type, pickupLat, pickupLng, deliveryLat, deliveryLng,
-    pickupDetails, deliveryDetails, notes, items, adOfferId } = parsed.data
-
-  // Validate pickup ≠ delivery
-  if (Math.abs(pickupLat - deliveryLat) < 0.0001 && Math.abs(pickupLng - deliveryLng) < 0.0001) {
-    return c.json({ error: 'عنوان الاستلام والتوصيل لازم يكونوا مختلفين' }, 400)
+    return c.json({ error: 'بيانات الأوردر غلط', details: parsed.error.flatten() }, 400)
   }
 
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
-
-  // حساب المسافة وسعر التوصيل
-  const distanceKm = calculateDistance(
-    { lat: pickupLat, lng: pickupLng },
-    { lat: deliveryLat, lng: deliveryLng }
-  )
-
-  const zone = detectZone({ lat: pickupLat, lng: pickupLng })
+  const zone = detectZone({ lat: parsed.data.pickupLat, lng: parsed.data.pickupLng })
 
   const { data: pricing } = await supabase
     .from('admin_pricing')
@@ -94,86 +88,131 @@ ordersRouter.post('/', async (c) => {
     return c.json({ error: 'منطقة التوصيل مش متاحة دلوقتي' }, 400)
   }
 
-  const priceResult = calculateDeliveryFee(distanceKm, pricing)
-
-  // إنشاء رقم أوردر فريد
   const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
 
-  // إنشاء الأوردر في الـ database
-  const { data: order, error: orderError } = await supabase
-    .from('orders')
-    .insert({
+  let orderData: Record<string, unknown>
+  let orderItems: { order_id: string; name: string; quantity: number; price?: number; shop_name: string; shop_address?: string }[] = []
+
+  if (parsed.data.type === 'SHOPPING') {
+    const { shops, pickupLat, pickupLng, notes, clientAddress } = parsed.data
+    const numShops = shops.length
+    const priceResult = calculateShoppingFee(numShops, pricing)
+
+    orderData = {
       order_number: orderNumber,
       client_id: user.userId,
-      type,
+      type: 'SHOPPING',
+      status: 'PENDING',
+      pickup_lat: pickupLat,
+      pickup_lng: pickupLng,
+      delivery_lat: pickupLat,
+      delivery_lng: pickupLng,
+      pickup_details: clientAddress || `عميل يطلب من ${numShops} محل`,
+      delivery_details: clientAddress || '',
+      distance_km: 0,
+      delivery_fee: priceResult.finalFee,
+      notes: notes || null,
+      num_shops: numShops,
+    }
+
+    // تحويل الـ shops لـ order_items
+    for (const shop of shops) {
+      for (const item of shop.items) {
+        orderItems.push({
+          order_id: '',  // يتملى بعد إنشاء الأوردر
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          shop_name: shop.shopName,
+          shop_address: shop.shopAddress,
+        })
+      }
+    }
+
+  } else {
+    // DELIVERY
+    const { pickupAddress, pickupPhone, deliveryAddress, deliveryPhone,
+            pickupLat, pickupLng, deliveryLat, deliveryLng, notes } = parsed.data
+
+    const distanceKm = calculateDistance(
+      { lat: pickupLat, lng: pickupLng },
+      { lat: deliveryLat, lng: deliveryLng }
+    )
+    const priceResult = calculateDeliveryFee(distanceKm, pricing)
+
+    orderData = {
+      order_number: orderNumber,
+      client_id: user.userId,
+      type: 'DELIVERY',
       status: 'PENDING',
       pickup_lat: pickupLat,
       pickup_lng: pickupLng,
       delivery_lat: deliveryLat,
       delivery_lng: deliveryLng,
-      pickup_details: pickupDetails,
-      delivery_details: deliveryDetails,
+      pickup_details: `${pickupAddress} | تليفون: ${pickupPhone}`,
+      delivery_details: `${deliveryAddress} | تليفون: ${deliveryPhone}`,
+      recipient_phone: deliveryPhone,
       distance_km: distanceKm,
       delivery_fee: priceResult.finalFee,
-      notes,
-      ad_offer_id: adOfferId || null,
-    })
+      notes: notes || null,
+      num_shops: 0,
+    }
+  }
+
+  const { data: order, error: orderError } = await supabase
+    .from('orders')
+    .insert(orderData)
     .select()
     .single()
 
-  if (orderError) {
+  if (orderError || !order) {
     console.error('Order creation error:', orderError)
     return c.json({ error: 'مقدرناش ننشئ الأوردر' }, 500)
   }
 
-  // إضافة الـ items لو موجودة
-  if (items && items.length > 0) {
+  // إضافة الـ items
+  if (orderItems.length > 0) {
     const { error: itemsError } = await supabase.from('order_items').insert(
-      items.map(item => ({
-        order_id: order.id,
-        name: item.name,
-        description: item.description,
-        quantity: item.quantity,
-        price: item.price,
-        shop_name: item.shopName,
-        shop_address: item.shopAddress,
-      }))
+      orderItems.map(item => ({ ...item, order_id: order.id }))
     )
     if (itemsError) {
       console.error('Order items error:', itemsError)
-      // Rollback the order if items fail
       await supabase.from('orders').delete().eq('id', order.id)
       return c.json({ error: 'مقدرناش نحفظ منتجات الأوردر' }, 500)
     }
   }
 
-  // مسح الـ cache عشان المناديب يشوفوا الأوردر الجديد فوراً
   await invalidatePendingOrdersCache(c.env.MANDOUBAK_KV)
 
-  return c.json({
-    success: true,
-    order: {
-      ...order,
-      deliveryFee: priceResult.finalFee,
-      distanceKm,
-      priceBreakdown: priceResult.breakdown,
-    }
-  }, 201)
+  return c.json({ success: true, order, message: 'تم تسجيل الطلب بنجاح!' }, 201)
 })
 
 // =====================
 // GET /orders/pending - الأوردرات المنتظرة (للمناديب)
 // =====================
 ordersRouter.get('/pending', requireRole('COURIER', 'ADMIN'), async (c) => {
-  // الأول جرب الـ Cache (3 ثواني)
+  // تحقق من حالة المندوب
+  const user = c.get('user')
+  if (user.role === 'COURIER') {
+    const supabaseCheck = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+    const { data: courier } = await supabaseCheck
+      .from('couriers')
+      .select('status')
+      .eq('user_id', user.userId)
+      .single()
+
+    if (!courier || courier.status !== 'APPROVED') {
+      return c.json({
+        success: false,
+        error: 'لم يتم الموافقة على حسابك بعد',
+        courierStatus: courier?.status || 'NOT_REGISTERED',
+      }, 403)
+    }
+  }
+
   const cached = await getCachedPendingOrders(c.env.MANDOUBAK_KV)
   if (cached) {
-    return c.json({
-      success: true,
-      orders: cached.data,
-      fromCache: true,
-      cachedAt: new Date(cached.cachedAt).toISOString()
-    })
+    return c.json({ success: true, orders: cached.data, fromCache: true })
   }
 
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
@@ -183,77 +222,54 @@ ordersRouter.get('/pending', requireRole('COURIER', 'ADMIN'), async (c) => {
     .select(`
       id, order_number, type, status,
       pickup_lat, pickup_lng, delivery_lat, delivery_lng,
-      pickup_details, delivery_details,
-      distance_km, delivery_fee, notes,
+      pickup_details, delivery_details, recipient_phone,
+      distance_km, delivery_fee, notes, num_shops,
       created_at,
-      order_items (name, quantity, shop_name, shop_address),
-      ad_offers (title, shop_name, product_name)
+      order_items (name, quantity, shop_name, shop_address)
     `)
     .eq('status', 'PENDING')
     .order('created_at', { ascending: false })
     .limit(50)
 
-  if (error) {
-    return c.json({ error: 'مقدرناش نجيب الأوردرات' }, 500)
-  }
+  if (error) return c.json({ error: 'مقدرناش نجيب الأوردرات' }, 500)
 
-  // Cache النتايج لمدة 3 ثواني
   await cachePendingOrders(c.env.MANDOUBAK_KV, orders || [])
 
-  return c.json({
-    success: true,
-    orders: orders || [],
-    fromCache: false,
-    fetchedAt: new Date().toISOString()
-  })
+  return c.json({ success: true, orders: orders || [], fromCache: false })
 })
 
 // =====================
-// POST /orders/:id/accept - قبول أوردر (منع Race Condition)
+// POST /orders/:id/accept - قبول أوردر
 // =====================
 ordersRouter.post('/:id/accept', requireRole('COURIER'), async (c) => {
   const user = c.get('user')
   const orderId = c.req.param('id')
 
-  if (!orderId || orderId.length > 30) {
+  if (!orderId || orderId.length > 50) {
     return c.json({ error: 'معرّف أوردر غير صحيح' }, 400)
   }
 
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
-  // جيب الـ courier_id من الـ database
   const { data: courier } = await supabase
     .from('couriers')
     .select('id, status')
     .eq('user_id', user.userId)
     .single()
 
-  if (!courier) {
-    return c.json({ error: 'بروفايل المندوب مش موجود' }, 400)
-  }
-
+  if (!courier) return c.json({ error: 'بروفايل المندوب مش موجود' }, 400)
   if (courier.status !== 'APPROVED') {
     return c.json({ error: 'حسابك لسه تحت المراجعة' }, 403)
   }
 
-  // Step 1: KV Lock (منع السباق على مستوى الـ Edge)
   const lockResult = await acquireOrderLock(c.env.MANDOUBAK_KV, orderId, courier.id)
-
   if (!lockResult.acquired) {
-    return c.json({
-      success: false,
-      error: 'الأوردر اتحجز',
-      message: lockResult.reason
-    }, 409)
+    return c.json({ success: false, error: 'الأوردر اتحجز من مندوب تاني', message: lockResult.reason }, 409)
   }
 
   try {
-    // Step 2: Atomic Transaction في Supabase (منع السباق على مستوى الـ DB)
     const { data: result, error } = await supabase
-      .rpc('accept_order', {
-        p_order_id: orderId,
-        p_courier_id: courier.id
-      })
+      .rpc('accept_order', { p_order_id: orderId, p_courier_id: courier.id })
 
     if (error) {
       await releaseOrderLock(c.env.MANDOUBAK_KV, orderId)
@@ -262,24 +278,13 @@ ordersRouter.post('/:id/accept', requireRole('COURIER'), async (c) => {
 
     if (!result.success) {
       await releaseOrderLock(c.env.MANDOUBAK_KV, orderId)
-      return c.json({
-        success: false,
-        error: result.message
-      }, 409)
+      return c.json({ success: false, error: result.message }, 409)
     }
 
-    // Step 3: مسح الـ Cache فوراً عشان الأوردر يختفي من المناديب
     await invalidatePendingOrdersCache(c.env.MANDOUBAK_KV)
-
-    // Step 4: فك الـ lock بعد ما التحديث اتعمل
     await releaseOrderLock(c.env.MANDOUBAK_KV, orderId)
 
-    return c.json({
-      success: true,
-      message: 'تم قبول الأوردر بنجاح!',
-      orderId,
-    })
-
+    return c.json({ success: true, message: 'تم قبول الأوردر بنجاح!', orderId })
   } catch (err) {
     await releaseOrderLock(c.env.MANDOUBAK_KV, orderId)
     return c.json({ error: 'خطأ غير متوقع' }, 500)
@@ -293,22 +298,25 @@ ordersRouter.get('/my', async (c) => {
   const user = c.get('user')
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
-  const query = user.role === 'COURIER'
-    ? supabase.from('orders').select(`
-        *, order_items(*), ad_offers(title, shop_name)
-      `).eq('courier_id', (await supabase.from('couriers').select('id').eq('user_id', user.userId).single()).data?.id)
-    : supabase.from('orders').select(`
-        *, order_items(*), ad_offers(title, shop_name), couriers(name, phone, rating)
-      `).eq('client_id', user.userId)
+  let query
+  if (user.role === 'COURIER') {
+    const { data: courier } = await supabase
+      .from('couriers').select('id').eq('user_id', user.userId).single()
+    if (!courier) return c.json({ success: true, orders: [] })
+    query = supabase.from('orders')
+      .select('*, order_items(*)')
+      .eq('courier_id', courier.id)
+  } else {
+    query = supabase.from('orders')
+      .select('*, order_items(*), couriers(name, phone, rating)')
+      .eq('client_id', user.userId)
+  }
 
   const { data: orders, error } = await query
     .order('created_at', { ascending: false })
     .limit(20)
 
-  if (error) {
-    return c.json({ error: 'مقدرناش نجيب الأوردرات' }, 500)
-  }
-
+  if (error) return c.json({ error: 'مقدرناش نجيب الأوردرات' }, 500)
   return c.json({ success: true, orders: orders || [] })
 })
 
@@ -319,85 +327,45 @@ ordersRouter.patch('/:id/status', requireRole('COURIER', 'ADMIN'), async (c) => 
   const user = c.get('user')
   const orderId = c.req.param('id')
 
-  if (!orderId || orderId.length > 30) {
+  if (!orderId || orderId.length > 50) {
     return c.json({ error: 'معرّف أوردر غير صحيح' }, 400)
   }
 
   let body: unknown
-  try {
-    body = await c.req.json()
-  } catch {
+  try { body = await c.req.json() } catch {
     return c.json({ error: 'بيانات غير صحيحة' }, 400)
   }
 
-  const schema = z.object({
-    status: z.enum(['PICKED_UP', 'DELIVERED', 'CANCELLED']),
-  })
-
+  const schema = z.object({ status: z.enum(['PICKED_UP', 'DELIVERED', 'CANCELLED']) })
   const parsed = schema.safeParse(body)
-  if (!parsed.success) {
-    return c.json({ error: 'حالة غير صحيحة' }, 400)
-  }
+  if (!parsed.success) return c.json({ error: 'حالة غير صحيحة' }, 400)
 
   const { status } = parsed.data
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
-  // التحقق من ownership - المندوب يعدّل أوردراته بس
   if (user.role === 'COURIER') {
     const { data: courier } = await supabase
-      .from('couriers')
-      .select('id')
-      .eq('user_id', user.userId)
-      .single()
-
-    if (!courier) {
-      return c.json({ error: 'بروفايل المندوب مش موجود' }, 400)
-    }
+      .from('couriers').select('id').eq('user_id', user.userId).single()
+    if (!courier) return c.json({ error: 'بروفايل المندوب مش موجود' }, 400)
 
     const { data: order } = await supabase
-      .from('orders')
-      .select('id, courier_id, status')
-      .eq('id', orderId)
-      .eq('courier_id', courier.id)  // المندوب بيعدّل أوردره هو بس
-      .single()
-
-    if (!order) {
-      return c.json({ error: 'الأوردر مش موجود أو مش بتاعك' }, 404)
-    }
-
-    // منع المندوب من إلغاء أوردر مش ACCEPTED
-    if (status === 'CANCELLED' && order.status !== 'ACCEPTED') {
-      return c.json({ error: 'مقدرش تلغي الأوردر في الحالة دي' }, 400)
-    }
+      .from('orders').select('id, courier_id, status')
+      .eq('id', orderId).eq('courier_id', courier.id).single()
+    if (!order) return c.json({ error: 'الأوردر مش موجود أو مش بتاعك' }, 404)
   }
 
-  const updates: Record<string, unknown> = {
-    status,
-    updated_at: new Date().toISOString(),
-  }
+  const updates: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
   if (status === 'DELIVERED') updates.completed_at = new Date().toISOString()
   if (status === 'CANCELLED') updates.cancelled_at = new Date().toISOString()
 
-  const { error } = await supabase
-    .from('orders')
-    .update(updates)
-    .eq('id', orderId)
+  const { error } = await supabase.from('orders').update(updates).eq('id', orderId)
+  if (error) return c.json({ error: 'مقدرناش نحدث الحالة' }, 500)
 
-  if (error) {
-    return c.json({ error: 'مقدرناش نحدث الحالة' }, 500)
-  }
-
-  // لو تم التوصيل، زوّد عداد التوصيلات للمندوب
   if (status === 'DELIVERED' && user.role === 'COURIER') {
     const { data: courier } = await supabase
-      .from('couriers')
-      .select('id, total_deliveries')
-      .eq('user_id', user.userId)
-      .single()
-
+      .from('couriers').select('id, total_deliveries').eq('user_id', user.userId).single()
     if (courier) {
-      await supabase
-        .from('couriers')
+      await supabase.from('couriers')
         .update({ total_deliveries: (courier.total_deliveries || 0) + 1 })
         .eq('id', courier.id)
     }
