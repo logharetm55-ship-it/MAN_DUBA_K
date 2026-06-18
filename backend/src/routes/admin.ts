@@ -4,7 +4,7 @@
 
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseClient } from '../lib/supabase'
 import type { Env } from '../index'
 import { requireRole } from '../middleware/auth'
 
@@ -17,7 +17,7 @@ adminRouter.use('*', requireRole('ADMIN'))
 // GET /admin/dashboard - إحصائيات عامة
 // =====================
 adminRouter.get('/dashboard', async (c) => {
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   const [ordersStats, couriersStats, adsStats, revenueStats] = await Promise.all([
     supabase.from('orders').select('status', { count: 'exact' }),
@@ -68,7 +68,7 @@ adminRouter.get('/dashboard', async (c) => {
 // GET /admin/couriers - كل المناديب
 // =====================
 adminRouter.get('/couriers', async (c) => {
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
   const status = c.req.query('status')
 
   // Validate status param
@@ -123,7 +123,7 @@ adminRouter.patch('/couriers/:id/approve', async (c) => {
   }
 
   const { status } = parsed.data
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   const { error } = await supabase
     .from('couriers')
@@ -148,7 +148,7 @@ adminRouter.patch('/couriers/:id/approve', async (c) => {
 // GET /admin/orders - كل الأوردرات
 // =====================
 adminRouter.get('/orders', async (c) => {
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
   const status = c.req.query('status')
   const pageRaw = parseInt(c.req.query('page') || '1')
   const page = isNaN(pageRaw) || pageRaw < 1 ? 1 : Math.min(pageRaw, 1000)
@@ -198,7 +198,7 @@ adminRouter.get('/orders', async (c) => {
 // Pricing Management - إدارة الأسعار
 // =====================
 adminRouter.get('/pricing', async (c) => {
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
   const { data, error } = await supabase.from('admin_pricing').select('*').order('zone')
 
   if (error) return c.json({ error: 'مقدرناش نجيب الأسعار' }, 500)
@@ -226,7 +226,7 @@ adminRouter.post('/pricing', async (c) => {
     return c.json({ error: 'بيانات غلط', details: parsed.error.flatten() }, 400)
   }
 
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   const { data, error } = await supabase
     .from('admin_pricing')
@@ -248,7 +248,7 @@ adminRouter.post('/pricing', async (c) => {
 // Ads/Offers Management - إدارة العروض
 // =====================
 adminRouter.get('/ads', async (c) => {
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
   const { data, error } = await supabase
     .from('ad_offers')
     .select('id, title, description, image_url, shop_name, product_name, product_price, is_active, click_count, start_date, end_date, created_at')
@@ -290,7 +290,7 @@ adminRouter.post('/ads', async (c) => {
     return c.json({ error: 'تاريخ الانتهاء لازم يكون بعد تاريخ البداية' }, 400)
   }
 
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   const { data, error } = await supabase
     .from('ad_offers')
@@ -354,7 +354,7 @@ adminRouter.patch('/ads/:id', async (c) => {
     return c.json({ error: 'مفيش بيانات للتحديث' }, 400)
   }
 
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   // Map camelCase to snake_case explicitly (no raw spread)
   const dbUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -388,7 +388,7 @@ adminRouter.delete('/ads/:id', async (c) => {
     return c.json({ error: 'معرّف إعلان غير صحيح' }, 400)
   }
 
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   const { error } = await supabase
     .from('ad_offers')

@@ -5,7 +5,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseClient } from '../lib/supabase'
 import type { Env } from '../index'
 import { requireRole } from '../middleware/auth'
 import {
@@ -73,7 +73,7 @@ ordersRouter.post('/', async (c) => {
     return c.json({ error: 'عنوان الاستلام والتوصيل لازم يكونوا مختلفين' }, 400)
   }
 
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   // حساب المسافة وسعر التوصيل
   const distanceKm = calculateDistance(
@@ -176,7 +176,7 @@ ordersRouter.get('/pending', requireRole('COURIER', 'ADMIN'), async (c) => {
     })
   }
 
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   const { data: orders, error } = await supabase
     .from('orders')
@@ -219,7 +219,7 @@ ordersRouter.post('/:id/accept', requireRole('COURIER'), async (c) => {
     return c.json({ error: 'معرّف أوردر غير صحيح' }, 400)
   }
 
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   // جيب الـ courier_id من الـ database
   const { data: courier } = await supabase
@@ -291,7 +291,7 @@ ordersRouter.post('/:id/accept', requireRole('COURIER'), async (c) => {
 // =====================
 ordersRouter.get('/my', async (c) => {
   const user = c.get('user')
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   const query = user.role === 'COURIER'
     ? supabase.from('orders').select(`
@@ -340,7 +340,7 @@ ordersRouter.patch('/:id/status', requireRole('COURIER', 'ADMIN'), async (c) => 
   }
 
   const { status } = parsed.data
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   // التحقق من ownership - المندوب يعدّل أوردراته بس
   if (user.role === 'COURIER') {

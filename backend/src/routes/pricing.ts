@@ -4,7 +4,7 @@
 
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseClient } from '../lib/supabase'
 import type { Env } from '../index'
 import { calculateDistance, calculateDeliveryFee, detectZone } from '../lib/pricing'
 
@@ -23,7 +23,7 @@ pricingRouter.get('/calculate', async (c) => {
     return c.json({ error: 'الإحداثيات ناقصة أو غلط' }, 400)
   }
 
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   // تحديد المنطقة
   const zone = detectZone({ lat: pickupLat, lng: pickupLng })
@@ -71,7 +71,7 @@ pricingRouter.get('/calculate', async (c) => {
 // GET /pricing/zones - كل مناطق التسعير
 // =====================
 pricingRouter.get('/zones', async (c) => {
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   const { data, error } = await supabase
     .from('admin_pricing')

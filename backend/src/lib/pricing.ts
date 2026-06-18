@@ -81,16 +81,15 @@ export function calculateDeliveryFee(
  * يحدد المنطقة بناءً على الـ coordinates (تقدر تعدل الـ zones حسب مدينتك)
  */
 export function detectZone(coords: Coordinates): string {
-  // مثال للقاهرة - عدل الـ boundaries حسب مدينتك
-  // القاهرة الكبرى
-  if (coords.lat >= 29.8 && coords.lat <= 30.2 && 
-      coords.lng >= 31.0 && coords.lng <= 31.5) {
-    return 'cairo'
-  }
-  // الجيزة
+  // الجيزة (أحدق نطاق أضيق - تتحقق قبل القاهرة)
   if (coords.lat >= 29.9 && coords.lat <= 30.1 && 
       coords.lng >= 30.8 && coords.lng <= 31.1) {
-    return 'giza'
+    return 'الجيزة'
+  }
+  // القاهرة الكبرى
+  if (coords.lat >= 29.7 && coords.lat <= 30.3 && 
+      coords.lng >= 31.0 && coords.lng <= 31.6) {
+    return 'القاهرة'
   }
   // افتراضي
   return 'default'

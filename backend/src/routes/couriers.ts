@@ -4,7 +4,7 @@
 
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseClient } from '../lib/supabase'
 import type { Env } from '../index'
 import { requireRole } from '../middleware/auth'
 
@@ -15,7 +15,7 @@ export const couriersRouter = new Hono<{ Bindings: Env }>()
 // =====================
 couriersRouter.post('/register', async (c) => {
   const user = c.get('user')
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   const body = await c.req.json()
 
@@ -104,7 +104,7 @@ couriersRouter.post('/register', async (c) => {
 // =====================
 couriersRouter.get('/profile', requireRole('COURIER'), async (c) => {
   const user = c.get('user')
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   const { data: courier, error } = await supabase
     .from('couriers')
@@ -142,7 +142,7 @@ couriersRouter.get('/profile', requireRole('COURIER'), async (c) => {
 couriersRouter.patch('/online-status', requireRole('COURIER'), async (c) => {
   const user = c.get('user')
   const { isOnline } = await c.req.json()
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   const { error } = await supabase
     .from('couriers')
@@ -171,7 +171,7 @@ couriersRouter.post('/rate/:orderId', async (c) => {
     return c.json({ error: 'التقييم لازم يكون من 1 لـ 5' }, 400)
   }
 
-  const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   // التحقق إن الأوردر بتاع اليوزر ده ومكتمل
   const { data: order } = await supabase
