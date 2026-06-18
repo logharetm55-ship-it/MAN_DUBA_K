@@ -1,5 +1,6 @@
 // =============================================================
-// Auth Context - Core types + Demo Provider
+// Auth Context - تسجيل مباشر (اسم + تليفون)
+// بدون Clerk - بيحفظ في Supabase + localStorage
 // =============================================================
 
 import { createContext, useContext, useState, ReactNode } from 'react'
@@ -8,14 +9,12 @@ export type UserRole = 'client' | 'courier' | 'admin' | null
 
 export interface AppUser {
   id: string
-  clerkId?: string
   name: string
-  phone: string | null
+  phone: string
   email: string | null
   role: UserRole
   avatar: string | null
   onboarded?: boolean
-  isDemo?: boolean
 }
 
 export interface AuthContextType {
@@ -24,8 +23,11 @@ export interface AuthContextType {
   isLoggedIn: boolean
   isLoading: boolean
   needsOnboarding: boolean
+  login: (user: AppUser) => void
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
+  updateRole: (role: UserRole) => void
+  // legacy demo compat
   demoLogin?: (role: UserRole) => void
 }
 
@@ -35,30 +37,48 @@ export const AuthContext = createContext<AuthContextType>({
   isLoggedIn: false,
   isLoading: false,
   needsOnboarding: false,
+  login: () => {},
   logout: async () => {},
   refreshUser: async () => {},
+  updateRole: () => {},
 })
 
-const DEMO_USERS: Record<NonNullable<UserRole>, AppUser> = {
-  client:  { id: 'demo-client',  name: 'أحمد العميل',  phone: '01012345678', email: null, role: 'client',  avatar: null, onboarded: true, isDemo: true },
-  courier: { id: 'demo-courier', name: 'محمد المندوب', phone: '01098765432', email: null, role: 'courier', avatar: null, onboarded: true, isDemo: true },
-  admin:   { id: 'demo-admin',   name: 'أدمن المنصة',  phone: '01111111111', email: null, role: 'admin',   avatar: null, onboarded: true, isDemo: true },
-}
+const STORAGE_KEY = 'mandoubak_user'
 
-export function DemoAuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(() => {
     try {
-      const saved = localStorage.getItem('mandoubak_demo_user')
+      const saved = localStorage.getItem(STORAGE_KEY)
       return saved ? JSON.parse(saved) : null
     } catch { return null }
   })
 
-  function demoLogin(role: UserRole) {
-    if (!role) return
-    const demoUser = DEMO_USERS[role]
-    setUser(demoUser)
-    localStorage.setItem('mandoubak_demo_user', JSON.stringify(demoUser))
+  function login(appUser: AppUser) {
+    setUser(appUser)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(appUser))
   }
+
+  async function logout() {
+    setUser(null)
+    localStorage.removeItem(STORAGE_KEY)
+  }
+
+  function updateRole(role: UserRole) {
+    if (!user || !role) return
+    const updated = { ...user, role, onboarded: true }
+    setUser(updated)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+  }
+
+  async function refreshUser() {
+    // إعادة قراءة من localStorage
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) setUser(JSON.parse(saved))
+    } catch { /* ignore */ }
+  }
+
+  const needsOnboarding = !!user && user.onboarded === false
 
   return (
     <AuthContext.Provider value={{
@@ -66,13 +86,15 @@ export function DemoAuthProvider({ children }: { children: ReactNode }) {
       role: user?.role || null,
       isLoggedIn: !!user,
       isLoading: false,
-      needsOnboarding: false,
-      logout: async () => {
-        setUser(null)
-        localStorage.removeItem('mandoubak_demo_user')
+      needsOnboarding,
+      login,
+      logout,
+      refreshUser,
+      updateRole,
+      demoLogin: (role) => {
+        if (!user || !role) return
+        updateRole(role)
       },
-      refreshUser: async () => {},
-      demoLogin,
     }}>
       {children}
     </AuthContext.Provider>

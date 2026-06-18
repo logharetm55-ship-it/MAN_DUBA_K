@@ -19,7 +19,7 @@ import AdminAds from './pages/admin/Ads'
 import AdminCouriers from './pages/admin/Couriers'
 import { useAuth } from './lib/auth-context'
 
-// Guard: لو اليوزر محتاج onboarding → روّحه لصفحة الاختيار
+// Guard: لو اليوزر محتاج onboarding → روّحه لصفحة اختيار الدور
 function OnboardingGuard({ children }: { children: React.ReactNode }) {
   const { isLoggedIn, isLoading, needsOnboarding } = useAuth()
   const navigate = useNavigate()
@@ -38,7 +38,7 @@ export default function App() {
   return (
     <OnboardingGuard>
       <Routes>
-        {/* Onboarding — outside layout, full screen */}
+        {/* Onboarding — full screen, outside layout */}
         <Route path="/onboarding" element={<OnboardingPage />} />
 
         <Route element={<Layout />}>

@@ -62,7 +62,6 @@ externalPort = 3001
 [userenv.shared]
 SUPABASE_URL = "https://klvceioawopljarpujnp.supabase.co"
 VITE_SUPABASE_URL = "https://klvceioawopljarpujnp.supabase.co"
-VITE_CLERK_PUBLISHABLE_KEY = "pk_test_Z2xvd2luZy1wb2xsaXdvZy0yOC5jbGVyay5hY2NvdW50cy5kZXYk"
 NODE_ENV = "development"
 PORT = "8787"
 JWT_SECRET = "mand0ubak_jwt_secret_123456789"
