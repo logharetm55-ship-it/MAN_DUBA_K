@@ -12,6 +12,8 @@ import { couriersRouter } from './routes/couriers'
 import { adminRouter } from './routes/admin'
 import { pricingRouter } from './routes/pricing'
 import { uploadRouter } from './routes/upload'
+import { webhookRouter } from './routes/webhook'
+import { usersRouter } from './routes/users'
 import { authMiddleware } from './middleware/auth'
 
 export type Env = {
@@ -96,6 +98,9 @@ app.get('/', (c) => c.json({
   timestamp: new Date().toISOString()
 }))
 
+// Webhooks - public (verified by signature)
+app.route('/api/webhooks', webhookRouter)
+
 // Public routes (rate limited)
 app.route('/api/pricing', pricingRouter)
 app.route('/api/upload', uploadRouter)
@@ -104,10 +109,12 @@ app.route('/api/upload', uploadRouter)
 app.use('/api/orders/*', authMiddleware)
 app.use('/api/couriers/*', authMiddleware)
 app.use('/api/admin/*', authMiddleware)
+app.use('/api/users/*', authMiddleware)
 
 app.route('/api/orders', ordersRouter)
 app.route('/api/couriers', couriersRouter)
 app.route('/api/admin', adminRouter)
+app.route('/api/users', usersRouter)
 
 // 404 handler
 app.notFound((c) => c.json({ error: 'المسار مش موجود' }, 404))

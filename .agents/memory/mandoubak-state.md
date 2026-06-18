@@ -25,15 +25,15 @@ description: Full state of the Mandoubak delivery platform — what's built, arc
 - `/admin/ads` — manage restaurant/vendor ads
 - `/admin/couriers` — approve/reject courier applications
 
-## Auth
-- `/login` — Clerk auth (Google/Phone/OTP)
-- `lib/auth-context.tsx` — AuthProvider + useAuth hook
-- `lib/notifications-context.tsx` — NotificationsProvider + useNotifications
+## Auth (REAL CLERK + Demo Fallback)
+- `/login` — Smart: uses Clerk SignIn when VITE_CLERK_PUBLISHABLE_KEY set, Demo Mode otherwise
+- `lib/auth-context.tsx` — AuthContext + DemoAuthProvider + useAuth hook
+- `lib/clerk-auth-inner.tsx` — ClerkAuthProviderInner (uses useUser/useClerk/useAuth from @clerk/clerk-react)
+- `main.tsx` — wraps with ClerkProvider+ClerkAuthProviderInner or DemoAuthProvider based on key existence
 
 ## Layout
 - Navbar: logo + desktop nav links + notification bell badge + user dropdown
 - BottomNav: mobile-only, role-aware (different tabs per role)
-- Both in `components/Layout.tsx` and `components/BottomNav.tsx`
 
 # Backend (Hono.js + Node.js local, port 8787)
 
@@ -55,6 +55,15 @@ description: Full state of the Mandoubak delivery platform — what's built, arc
 - `PATCH /api/admin/couriers/:id/approve` — approve/reject
 - `GET /api/admin/orders` — all orders with pagination
 - `POST /api/upload/id` — upload ID card images (R2)
+- `GET /api/users/me` — current user profile (role from Supabase)
+- `PATCH /api/users/me` — update name/phone
+- `POST /api/webhooks/clerk` — Clerk webhook (user.created/updated/deleted → Supabase)
+
+## Clerk Webhook
+- No svix package (peer dep conflict) — implemented manual HMAC-SHA256 verification using Node.js `crypto`
+- Spec: svix-id + svix-timestamp + svix-signature headers; signed content = `id.timestamp.body`
+- Secret format: `whsec_<base64>` (strip prefix before HMAC)
+- Soft deletes users (sets deleted_at) instead of hard delete
 
 ## Supabase Setup (CRITICAL LESSONS)
 - **Zone names must match DB**: detectZone() returns Arabic ('القاهرة','الجيزة','default') — must match admin_pricing.zone column
@@ -63,6 +72,7 @@ description: Full state of the Mandoubak delivery platform — what's built, arc
 - **Grants required**: must run `GRANT USAGE ON SCHEMA public TO service_role, anon, authenticated` + `GRANT ALL ON ALL TABLES` to service_role, SELECT to anon
 - **VITE_ prefix**: frontend env vars must be VITE_SUPABASE_ANON_KEY and VITE_SUPABASE_URL — set via setEnvVars() not secrets
 - **Anon key validation**: frontend checks `anonKey.startsWith('eyJ')` before calling Supabase, falls back to demo data otherwise
+- **users table extra columns**: name, avatar_url, deleted_at must be added via sql/clerk-webhook-migration.sql
 
 ## Database (Supabase PostgreSQL)
 - Project ref: klvceioawopljarpujnp
@@ -72,7 +82,10 @@ description: Full state of the Mandoubak delivery platform — what's built, arc
 - Seeded: 6 ad_offers + admin_pricing zones (default/القاهرة/الجيزة)
 
 ## Key decisions
-**Why getSupabaseClient singleton:** prevents multiple RealtimeClient initializations per request — each createClient() call initializes a new WebSocket connection which crashes on Node.js 20
-**Why ws package:** Node.js 20 lacks native WebSocket; @supabase/realtime-js requires it even for REST-only operations
-**Why VITE_ env vars not secrets:** Vite build system only exposes VITE_-prefixed vars to frontend — set as env vars via setEnvVars(), not Replit secrets
+**Why getSupabaseClient singleton:** prevents multiple RealtimeClient initializations per request
+**Why ws package:** Node.js 20 lacks native WebSocket
+**Why VITE_ env vars not secrets:** Vite build system only exposes VITE_-prefixed vars to frontend
 **Why fallback to demo data:** anon key validity check prevents crashes when key is misconfigured
+**Why manual HMAC for webhooks:** svix npm package has peer dep conflicts in this monorepo; Node crypto works identically
+**Why ClerkAuthProviderInner in separate file:** Vite ESM doesn't allow require(); Clerk hooks must be statically imported in a component only rendered inside ClerkProvider — separate file keeps DemoAuthProvider isolated
+**Why useAuth() for Clerk token:** In @clerk/clerk-react v5, getToken() is on the session via useAuth(), not on the UserResource object from useUser()
