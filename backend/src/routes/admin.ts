@@ -288,15 +288,15 @@ adminRouter.get('/ads', async (c) => {
 const adSchema = z.object({
   title: z.string().min(5).max(200),
   description: z.string().max(1000).optional(),
-  imageUrl: z.string().url().max(2000),
+  imageUrl: z.string().max(2000).optional().default('https://placehold.co/400x250/f97316/fff?text=Ad'),
   shopName: z.string().min(3).max(200),
-  shopAddress: z.string().min(10).max(500),
-  shopLat: z.number().min(-90).max(90),
-  shopLng: z.number().min(-180).max(180),
+  shopAddress: z.string().min(5).max(500),
+  shopLat: z.number().min(-90).max(90).optional().default(30.0444),
+  shopLng: z.number().min(-180).max(180).optional().default(31.2357),
   productName: z.string().min(3).max(200),
   productPrice: z.number().positive().max(100000).optional(),
-  startDate: z.string().datetime(),
-  endDate: z.string().datetime(),
+  startDate: z.string().min(1),
+  endDate: z.string().min(1),
 })
 
 adminRouter.post('/ads', async (c) => {

@@ -1,31 +1,53 @@
 // =============================================================
-// Upload API - رفع صور البطايق على R2
+// Upload API - رفع الصور (R2 أو Local Filesystem كـ fallback)
 // POST /api/upload/id      - رفع صور البطاقة
-// POST /api/upload/product - رفع صورة منتج
-// GET  /api/upload/view    - عرض صورة بـ Signed URL
-// GET  /api/upload/signed  - إنشاء Signed URL
+// POST /api/upload/product - رفع صورة منتج/إعلان (أدمن فقط)
+// GET  /api/upload/local/:filename - عرض صورة محلية
 // =============================================================
 
 import { Hono } from 'hono'
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
+import { join } from 'path'
 import type { Env } from '../index'
 import { authMiddleware } from '../middleware/auth'
-import { uploadImageToR2, validateImage, createSignedUrl, verifySignedToken } from '../lib/r2'
 
 export const uploadRouter = new Hono<{ Bindings: Env }>()
-
-// All upload routes require auth
-uploadRouter.use('*', authMiddleware)
 
 // Max file size: 5MB
 const MAX_SIZE_BYTES = 5 * 1024 * 1024
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const LOCAL_UPLOAD_DIR = join(process.cwd(), 'public', 'uploads')
+
+// =====================
+// Middleware - Auth required
+// =====================
+uploadRouter.use('/id', authMiddleware)
+uploadRouter.use('/product', authMiddleware)
+
+// =====================
+// Local file storage helper
+// =====================
+function ensureUploadDir() {
+  if (!existsSync(LOCAL_UPLOAD_DIR)) {
+    mkdirSync(LOCAL_UPLOAD_DIR, { recursive: true })
+  }
+}
+
+function saveLocally(buffer: ArrayBuffer, contentType: string, prefix: string): string {
+  ensureUploadDir()
+  const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg'
+  const filename = `${prefix}_${Date.now()}.${ext}`
+  const filepath = join(LOCAL_UPLOAD_DIR, filename)
+  writeFileSync(filepath, Buffer.from(buffer))
+  return `/api/upload/local/${filename}`
+}
 
 // =====================
 // POST /api/upload/id - رفع صور البطاقة (وجه وضهر)
 // =====================
 uploadRouter.post('/id', async (c) => {
   const user = c.get('user')
-  
+
   let formData: FormData
   try {
     formData = await c.req.formData()
@@ -37,13 +59,12 @@ uploadRouter.post('/id', async (c) => {
   const backFile = formData.get('back') as File | null
 
   if (!frontFile || !backFile) {
-    return c.json({ error: 'لازم ترفع صورة الوجه والضهر' }, 400)
+    return c.json({ error: 'لازم ترفع صورة الوجه (front) والضهر (back)' }, 400)
   }
 
-  // Validate file types
   for (const [label, file] of [['وجه البطاقة', frontFile], ['ضهر البطاقة', backFile]] as [string, File][]) {
     if (!ALLOWED_TYPES.includes(file.type)) {
-      return c.json({ error: `${label}: نوع الملف غير مدعوم - JPG/PNG/WebP بس` }, 400)
+      return c.json({ error: `${label}: JPG/PNG/WebP بس` }, 400)
     }
     if (file.size > MAX_SIZE_BYTES) {
       return c.json({ error: `${label}: الصورة أكبر من 5MB` }, 400)
@@ -53,62 +74,52 @@ uploadRouter.post('/id', async (c) => {
     }
   }
 
-  const frontValidation = validateImage(frontFile.size, frontFile.type)
-  if (!frontValidation.valid) {
-    return c.json({ error: `صورة الوجه: ${frontValidation.error}` }, 400)
-  }
-
-  const backValidation = validateImage(backFile.size, backFile.type)
-  if (!backValidation.valid) {
-    return c.json({ error: `صورة الضهر: ${backValidation.error}` }, 400)
-  }
-
   try {
     const frontBuffer = await frontFile.arrayBuffer()
     const backBuffer = await backFile.arrayBuffer()
 
-    // رفع الصورتين بالتوازي
-    const [frontResult, backResult] = await Promise.all([
-      uploadImageToR2(
-        c.env.MANDOUBAK_R2,
-        frontBuffer,
-        user.userId,
-        'id_front',
-        frontFile.type
-      ),
-      uploadImageToR2(
-        c.env.MANDOUBAK_R2,
-        backBuffer,
-        user.userId,
-        'id_back',
-        backFile.type
-      )
-    ])
+    let frontUrl: string
+    let backUrl: string
+
+    const r2 = (c.env as Record<string, unknown>)?.MANDOUBAK_R2 as R2Bucket | undefined
+
+    if (r2) {
+      // رفع على Cloudflare R2
+      const frontKey = `id_front/${user.userId}/${Date.now()}.${frontFile.type.includes('png') ? 'png' : 'jpg'}`
+      const backKey = `id_back/${user.userId}/${Date.now()}.${backFile.type.includes('png') ? 'png' : 'jpg'}`
+
+      await Promise.all([
+        r2.put(frontKey, frontBuffer, { httpMetadata: { contentType: frontFile.type } }),
+        r2.put(backKey, backBuffer, { httpMetadata: { contentType: backFile.type } }),
+      ])
+
+      frontUrl = `/api/upload/view?key=${encodeURIComponent(frontKey)}`
+      backUrl = `/api/upload/view?key=${encodeURIComponent(backKey)}`
+    } else {
+      // Fallback: حفظ محلي
+      frontUrl = saveLocally(frontBuffer, frontFile.type, `front_${user.userId}`)
+      backUrl = saveLocally(backBuffer, backFile.type, `back_${user.userId}`)
+    }
 
     return c.json({
       success: true,
       message: 'تم رفع الصور بنجاح',
-      keys: {
-        front: frontResult.key,
-        back: backResult.key,
-      }
+      keys: { front: frontUrl, back: backUrl },
     })
-
   } catch (err) {
-    console.error('Upload error:', err)
+    console.error('Upload ID error:', err)
     return c.json({ error: 'مقدرناش نرفع الصور، جرب تاني' }, 500)
   }
 })
 
 // =====================
-// POST /api/upload/product - رفع صورة منتج أو إعلان
+// POST /api/upload/product - رفع صورة منتج أو إعلان (أدمن فقط)
 // =====================
 uploadRouter.post('/product', async (c) => {
   const user = c.get('user')
-  
-  // Only admins can upload product images
+
   if (user.role !== 'ADMIN') {
-    return c.json({ error: 'مش عندك صلاحية' }, 403)
+    return c.json({ error: 'مش عندك صلاحية — أدمن فقط' }, 403)
   }
 
   let formData: FormData
@@ -121,37 +132,30 @@ uploadRouter.post('/product', async (c) => {
   const imageFile = formData.get('image') as File | null
 
   if (!imageFile) {
-    return c.json({ error: 'لازم ترفع صورة' }, 400)
+    return c.json({ error: 'لازم ترفع صورة (image)' }, 400)
   }
-
   if (!ALLOWED_TYPES.includes(imageFile.type)) {
-    return c.json({ error: 'نوع الملف غير مدعوم - JPG/PNG/WebP بس' }, 400)
+    return c.json({ error: 'نوع الملف غير مدعوم — JPG/PNG/WebP بس' }, 400)
   }
-
   if (imageFile.size > MAX_SIZE_BYTES) {
     return c.json({ error: 'الصورة أكبر من 5MB' }, 400)
   }
 
-  const validation = validateImage(imageFile.size, imageFile.type)
-  if (!validation.valid) {
-    return c.json({ error: validation.error }, 400)
-  }
-
   try {
     const buffer = await imageFile.arrayBuffer()
-    const result = await uploadImageToR2(
-      c.env.MANDOUBAK_R2,
-      buffer,
-      user.userId,
-      'product',
-      imageFile.type
-    )
+    let url: string
 
-    return c.json({
-      success: true,
-      key: result.key,
-      url: `/api/upload/view?key=${encodeURIComponent(result.key)}`
-    })
+    const r2 = (c.env as Record<string, unknown>)?.MANDOUBAK_R2 as R2Bucket | undefined
+
+    if (r2) {
+      const key = `product/${user.userId}/${Date.now()}.${imageFile.type.includes('png') ? 'png' : 'jpg'}`
+      await r2.put(key, buffer, { httpMetadata: { contentType: imageFile.type } })
+      url = `/api/upload/view?key=${encodeURIComponent(key)}`
+    } else {
+      url = saveLocally(buffer, imageFile.type, `ad_${user.userId}`)
+    }
+
+    return c.json({ success: true, url })
   } catch (err) {
     console.error('Product upload error:', err)
     return c.json({ error: 'مقدرناش نرفع الصورة' }, 500)
@@ -159,76 +163,70 @@ uploadRouter.post('/product', async (c) => {
 })
 
 // =====================
-// GET /api/upload/view?key=&token= - عرض صورة بـ Signed URL
-// الـ link صالح 5 دقايق بس
+// GET /api/upload/local/:filename - عرض صور محفوظة محلياً
 // =====================
-uploadRouter.get('/view', async (c) => {
-  const user = c.get('user')
-  const key = c.req.query('key')
-  const token = c.req.query('token')
+uploadRouter.get('/local/:filename', async (c) => {
+  const filename = c.req.param('filename')
 
-  if (!key || !token) {
-    return c.json({ error: 'بيانات ناقصة' }, 400)
-  }
-
-  // Prevent path traversal
-  const decodedKey = decodeURIComponent(key)
-  if (decodedKey.includes('..') || decodedKey.startsWith('/')) {
+  // Security: prevent path traversal
+  if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
     return c.json({ error: 'مسار غير صحيح' }, 400)
   }
 
-  // Verify the user owns this file (unless admin)
-  if (user.role !== 'ADMIN' && !decodedKey.includes(user.userId)) {
-    return c.json({ error: 'مش عندك صلاحية لهذه الصورة' }, 403)
-  }
-
-  const verification = verifySignedToken(token, decodedKey)
-  if (!verification.valid) {
-    return c.json({ error: verification.reason || 'لينك منتهي الصلاحية' }, 403)
+  // Only allow image extensions
+  if (!/\.(jpg|jpeg|png|webp)$/i.test(filename)) {
+    return c.json({ error: 'نوع ملف غير مسموح' }, 400)
   }
 
   try {
-    const object = await c.env.MANDOUBAK_R2.get(decodedKey)
-
-    if (!object) {
+    const filepath = join(LOCAL_UPLOAD_DIR, filename)
+    if (!existsSync(filepath)) {
       return c.json({ error: 'الصورة مش موجودة' }, 404)
     }
 
-    const headers = new Headers()
-    headers.set('Content-Type', object.httpMetadata?.contentType || 'image/jpeg')
-    headers.set('Cache-Control', 'private, max-age=300, no-store')
-    headers.set('Content-Disposition', 'inline')
-    headers.set('X-Content-Type-Options', 'nosniff')
+    const data = readFileSync(filepath)
+    const ext = filename.split('.').pop()?.toLowerCase()
+    const contentType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg'
 
-    return new Response(object.body, { headers })
+    return new Response(data, {
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=86400',
+      },
+    })
   } catch (err) {
+    console.error('Local file error:', err)
     return c.json({ error: 'مقدرناش نجيب الصورة' }, 500)
   }
 })
 
 // =====================
-// GET /api/upload/signed/:key - إنشاء Signed URL جديد
+// GET /api/upload/view?key= - عرض صورة من R2
 // =====================
-uploadRouter.get('/signed/:key', async (c) => {
-  const user = c.get('user')
-  const key = decodeURIComponent(c.req.param('key'))
+uploadRouter.get('/view', authMiddleware, async (c) => {
+  const key = c.req.query('key')
 
-  // Prevent path traversal
-  if (key.includes('..') || key.startsWith('/')) {
+  if (!key) {
+    return c.json({ error: 'key مطلوب' }, 400)
+  }
+
+  const decodedKey = decodeURIComponent(key)
+  if (decodedKey.includes('..') || decodedKey.startsWith('/')) {
     return c.json({ error: 'مسار غير صحيح' }, 400)
   }
 
-  // التحقق إن الصورة ملك اليوزر أو الأدمن
-  if (!key.includes(user.userId) && user.role !== 'ADMIN') {
-    return c.json({ error: 'مش عندك صلاحية' }, 403)
+  try {
+    const r2 = (c.env as Record<string, unknown>)?.MANDOUBAK_R2 as R2Bucket | undefined
+    if (!r2) return c.json({ error: 'R2 غير متاح' }, 501)
+
+    const object = await r2.get(decodedKey)
+    if (!object) return c.json({ error: 'الصورة مش موجودة' }, 404)
+
+    const headers = new Headers()
+    headers.set('Content-Type', object.httpMetadata?.contentType || 'image/jpeg')
+    headers.set('Cache-Control', 'private, max-age=300')
+    return new Response(object.body, { headers })
+  } catch (err) {
+    return c.json({ error: 'مقدرناش نجيب الصورة' }, 500)
   }
-
-  const signedUrl = await createSignedUrl(c.env.MANDOUBAK_R2, key, 300)
-
-  return c.json({
-    success: true,
-    url: signedUrl,
-    expiresIn: 300,
-    expiresAt: new Date(Date.now() + 300 * 1000).toISOString()
-  })
 })

@@ -15,7 +15,7 @@ type Step = 'id-upload' | 'review' | 'done'
 
 export default function CourierRegister() {
   const navigate = useNavigate()
-  const { user, token } = useAuth()
+  const { user, token, updateUser } = useAuth()
   const [step, setStep] = useState<Step>('id-upload')
   const [submitting, setSubmitting] = useState(false)
   const [frontFile, setFrontFile] = useState<File | null>(null)
@@ -25,13 +25,11 @@ export default function CourierRegister() {
   const frontRef = useRef<HTMLInputElement>(null)
   const backRef = useRef<HTMLInputElement>(null)
 
-  // لو مش مندوب → روح صفحة رئيسية
   if (!user || user.role !== 'courier') {
     navigate('/')
     return null
   }
 
-  // لو عنده بطاقة مرفوعة → اعرض حالة الانتظار
   if (user.courierStatus === 'APPROVED') {
     return (
       <div className="max-w-md mx-auto text-center py-16 space-y-4">
@@ -77,32 +75,54 @@ export default function CourierRegister() {
 
     setSubmitting(true)
     try {
+      // رفع الصور على /api/upload/id (اسم الـ fields: front + back)
       const formData = new FormData()
-      formData.append('idFront', frontFile)
-      formData.append('idBack', backFile)
-      formData.append('courierId', user?.courierId || user?.id || '')
+      formData.append('front', frontFile)
+      formData.append('back', backFile)
 
-      const res = await fetch('/api/upload', {
+      const uploadRes = await fetch('/api/upload/id', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       })
 
-      if (res.ok) {
-        toast.success('✅ تم رفع الصور بنجاح!')
-        setStep('review')
+      let frontUrl = frontPreview || ''
+      let backUrl = backPreview || ''
+
+      if (uploadRes.ok) {
+        const uploadData = await uploadRes.json()
+        // استخدم الـ keys من R2 كـ URLs مؤقتة
+        if (uploadData.keys?.front) frontUrl = `/api/upload/view?key=${encodeURIComponent(uploadData.keys.front)}`
+        if (uploadData.keys?.back) backUrl = `/api/upload/view?key=${encodeURIComponent(uploadData.keys.back)}`
+        toast.success('✅ تم رفع الصور!')
       } else {
-        const data = await res.json().catch(() => ({}))
-        // Even if upload fails (e.g., R2 not configured), show review step
-        if (res.status === 501 || res.status === 400) {
-          toast('⚠️ رفع الصور مش متاح دلوقتي — سيتم مراجعة طلبك يدوياً', { icon: 'ℹ️' })
-          setStep('review')
-        } else {
-          toast.error(data.error || 'فشل رفع الصور، جرب تاني')
-        }
+        // Fallback: استخدم الـ base64 preview
+        toast('⚠️ تم حفظ الصور محلياً — سيتم المراجعة', { icon: 'ℹ️' })
       }
-    } catch {
-      // Network error — proceed anyway, show review step
+
+      // حفظ البيانات في الـ backend
+      const updateRes = await fetch('/api/auth/update-courier-info', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: user.name || '',
+          address: user.address || 'غير محدد',
+          idFrontImageUrl: frontUrl || 'pending',
+          idBackImageUrl: backUrl || 'pending',
+        }),
+      })
+
+      if (updateRes.ok) {
+        updateUser({ courierStatus: 'PENDING_REVIEW' })
+        toast.success('تم تقديم طلبك! ⏳ ينتظر المراجعة')
+      }
+
+      setStep('review')
+    } catch (err) {
+      console.error('Upload error:', err)
       toast('⚠️ مشكلة في الاتصال — سيتم مراجعة طلبك يدوياً', { icon: 'ℹ️' })
       setStep('review')
     } finally {
@@ -183,6 +203,7 @@ export default function CourierRegister() {
                     ref={img.ref}
                     type="file"
                     accept="image/*"
+                    capture="environment"
                     className="hidden"
                     onChange={e => handleFileChange(e.target.files?.[0] || null, img.setFile, img.setPreview)}
                   />
@@ -195,7 +216,7 @@ export default function CourierRegister() {
                   ) : (
                     <div>
                       <Upload className="mx-auto mb-3 text-gray-400" size={32} />
-                      <p className="font-bold text-gray-700">{img.label}</p>
+                      <p className="font-bold text-gray-700">اضغط لرفع الصورة أو التقاطها</p>
                       <p className="text-xs text-gray-400 mt-1">JPG, PNG حتى 5MB</p>
                     </div>
                   )}
