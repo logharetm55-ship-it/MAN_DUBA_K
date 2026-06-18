@@ -2,7 +2,7 @@
 // App Router - مع Admin Guard على /admin-secret
 // =============================================================
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Routes, Route, Navigate,
   useNavigate, useLocation,
@@ -51,14 +51,209 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
 }
 
 // =============================================================
-// Guard: Admin only — يتحقق من admin flag في localStorage أو role
+// Admin Login Form — داخل الـ Admin Guard
+// =============================================================
+function AdminLoginForm() {
+  const { login } = useAuth()
+  const navigate = useNavigate()
+  const [phone, setPhone] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [createForm, setCreateForm] = useState({ phone: '', password: '', name: '', secret: '' })
+  const [createLoading, setCreateLoading] = useState(false)
+  const [createMsg, setCreateMsg] = useState('')
+
+  async function handleAdminLogin(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.replace(/\D/g, ''), password }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'بيانات غلط'); return }
+      if (data.user.role !== 'ADMIN') { setError('الحساب ده مش حساب أدمن'); return }
+
+      const appUser = {
+        id: data.user.id,
+        name: data.user.name,
+        phone: data.user.phone,
+        email: null as null,
+        role: 'admin' as const,
+        avatar: null as null,
+        address: data.user.address,
+        onboarded: true,
+      }
+      login(appUser, data.token)
+      navigate('/admin-secret', { replace: true })
+    } catch {
+      setError('مشكلة في الاتصال بالسيرفر')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleCreateAdmin(e: React.FormEvent) {
+    e.preventDefault()
+    setCreateMsg('')
+    setCreateLoading(true)
+    try {
+      const res = await fetch('/api/auth/create-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: createForm.phone.replace(/\D/g, ''),
+          password: createForm.password,
+          name: createForm.name,
+          adminSecret: createForm.secret,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setCreateMsg('✅ ' + data.message)
+        setShowCreate(false)
+        setPhone(createForm.phone.replace(/\D/g, ''))
+        setPassword(createForm.password)
+      } else {
+        setCreateMsg('❌ ' + (data.error || 'فشل'))
+      }
+    } catch {
+      setCreateMsg('❌ مشكلة في الاتصال')
+    } finally {
+      setCreateLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <ShieldCheck className="text-white" size={28} />
+          </div>
+          <h1 className="text-2xl font-black text-white">لوحة أدمن مندوبك</h1>
+          <p className="text-gray-400 mt-1 text-sm">دخول للمشرفين فقط</p>
+        </div>
+
+        {!showCreate ? (
+          <>
+            <form onSubmit={handleAdminLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-1.5 text-right">رقم التليفون</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
+                  placeholder="01012345678"
+                  maxLength={11}
+                  dir="ltr"
+                  required
+                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-center font-mono focus:outline-none focus:border-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-1.5 text-right">الباسورد</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+              {error && (
+                <div className="bg-red-900/50 border border-red-700 text-red-300 rounded-xl px-4 py-3 text-sm text-center">
+                  {error}
+                </div>
+              )}
+              {createMsg && (
+                <div className="bg-green-900/50 border border-green-700 text-green-300 rounded-xl px-4 py-3 text-sm text-center">
+                  {createMsg}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-black py-3.5 rounded-xl transition-all flex items-center justify-center gap-2"
+              >
+                {loading ? 'جاري الدخول...' : 'دخول →'}
+              </button>
+            </form>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="w-full mt-4 text-gray-500 hover:text-gray-300 text-xs text-center transition-colors"
+            >
+              إنشاء أول حساب أدمن
+            </button>
+          </>
+        ) : (
+          <>
+            <h2 className="text-white font-bold text-lg mb-4 text-center">إنشاء حساب أدمن جديد</h2>
+            <form onSubmit={handleCreateAdmin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-1.5 text-right">الاسم</label>
+                <input type="text" value={createForm.name} onChange={e => setCreateForm({ ...createForm, name: e.target.value })}
+                  placeholder="اسم المشرف" required dir="rtl"
+                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-1.5 text-right">رقم التليفون</label>
+                <input type="tel" value={createForm.phone} onChange={e => setCreateForm({ ...createForm, phone: e.target.value.replace(/\D/g, '') })}
+                  placeholder="01012345678" maxLength={11} dir="ltr" required
+                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-center font-mono focus:outline-none focus:border-purple-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-1.5 text-right">الباسورد (8 حروف+)</label>
+                <input type="password" value={createForm.password} onChange={e => setCreateForm({ ...createForm, password: e.target.value })}
+                  placeholder="••••••••" minLength={8} required
+                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-1.5 text-right">المفتاح السري للإدمن</label>
+                <input type="password" value={createForm.secret} onChange={e => setCreateForm({ ...createForm, secret: e.target.value })}
+                  placeholder="mandoubak_admin_2024" required dir="ltr"
+                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 font-mono text-sm focus:outline-none focus:border-purple-500" />
+                <p className="text-gray-600 text-xs mt-1 text-right">الافتراضي: mandoubak_admin_2024</p>
+              </div>
+              {createMsg && (
+                <div className={`rounded-xl px-4 py-3 text-sm text-center ${createMsg.startsWith('✅') ? 'bg-green-900/50 border border-green-700 text-green-300' : 'bg-red-900/50 border border-red-700 text-red-300'}`}>
+                  {createMsg}
+                </div>
+              )}
+              <button type="submit" disabled={createLoading}
+                className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-black py-3.5 rounded-xl transition-all">
+                {createLoading ? 'جاري الإنشاء...' : 'إنشاء الحساب →'}
+              </button>
+            </form>
+            <button onClick={() => { setShowCreate(false); setCreateMsg('') }}
+              className="w-full mt-4 text-gray-500 hover:text-gray-300 text-xs text-center transition-colors">
+              ← رجوع للدخول
+            </button>
+          </>
+        )}
+
+        <p className="text-center text-gray-600 text-xs mt-6">
+          هذه الصفحة للمشرفين المعتمدين فقط
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// =============================================================
+// Guard: Admin only — يتحقق من role الحقيقي في الـ JWT
 // =============================================================
 function AdminGuard({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth()
-  const adminSession = localStorage.getItem('mandoubak_admin_session') === 'true'
+  const { user, isLoggedIn } = useAuth()
 
-  if (!adminSession && user?.role !== 'admin') {
-    return <Navigate to="/" replace />
+  if (!isLoggedIn || user?.role !== 'admin') {
+    return <AdminLoginForm />
   }
   return <>{children}</>
 }

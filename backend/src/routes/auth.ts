@@ -245,6 +245,119 @@ authRouter.post('/login', zValidator('json', loginSchema), async (c) => {
 })
 
 // =====================
+// POST /api/auth/send-otp - إرسال كود التحقق للرقم
+// =====================
+authRouter.post('/send-otp', async (c) => {
+  let body: unknown
+  try { body = await c.req.json() } catch {
+    return c.json({ error: 'بيانات غير صحيحة' }, 400)
+  }
+
+  const schema = z.object({
+    phone: z.string().regex(/^01[0-9]{9}$/, 'رقم التليفون غلط'),
+    purpose: z.enum(['register', 'login']).default('register'),
+  })
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) return c.json({ error: 'رقم التليفون غلط (مثال: 01012345678)' }, 400)
+
+  const { phone, purpose } = parsed.data
+
+  // لو التسجيل: نتحقق إن الرقم مش مسجل
+  if (purpose === 'register') {
+    const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+    const { data: existing } = await supabase
+      .from('users')
+      .select('id')
+      .eq('phone', phone)
+      .single()
+    if (existing) {
+      return c.json({ error: 'رقم التليفون ده مسجل قبل كده — سجل دخول' }, 409)
+    }
+  }
+
+  // توليد كود 6 أرقام
+  const otp = Math.floor(100000 + Math.random() * 900000).toString()
+  const otpKey = `otp:${phone}`
+
+  // حفظ الكود في KV لمدة 5 دقائق
+  await c.env.MANDOUBAK_KV.put(otpKey, otp, { expirationTtl: 300 })
+
+  // محاولة إرسال SMS لو Twilio متاح
+  const twilioSid = (c.env as Record<string, unknown>).TWILIO_ACCOUNT_SID as string | undefined
+  const twilioToken = (c.env as Record<string, unknown>).TWILIO_AUTH_TOKEN as string | undefined
+  const twilioPhone = (c.env as Record<string, unknown>).TWILIO_PHONE as string | undefined
+
+  let smsSent = false
+  if (twilioSid && twilioToken && twilioPhone) {
+    try {
+      const formData = new URLSearchParams({
+        From: twilioPhone,
+        To: `+2${phone}`,
+        Body: `مندوبك: كود التحقق هو ${otp} — صالح لمدة 5 دقائق`,
+      })
+      const resp = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Authorization: `Basic ${btoa(`${twilioSid}:${twilioToken}`)}`,
+          },
+          body: formData,
+        }
+      )
+      smsSent = resp.ok
+    } catch { /* ignore */ }
+  }
+
+  // في وضع التطوير: نرجع الكود في الـ response عشان يتجرب
+  const isDev = c.env.NODE_ENV === 'development' || !twilioSid
+  console.log(`[OTP] ${phone} → ${otp}`)
+
+  return c.json({
+    success: true,
+    message: smsSent
+      ? `تم إرسال الكود على رقم ${phone}`
+      : `تم إنشاء الكود — راجع الـ console`,
+    ...(isDev && { dev_otp: otp }),
+    smsSent,
+  })
+})
+
+// =====================
+// POST /api/auth/verify-otp - التحقق من الكود
+// =====================
+authRouter.post('/verify-otp', async (c) => {
+  let body: unknown
+  try { body = await c.req.json() } catch {
+    return c.json({ error: 'بيانات غير صحيحة' }, 400)
+  }
+
+  const schema = z.object({
+    phone: z.string().regex(/^01[0-9]{9}$/, 'رقم التليفون غلط'),
+    otp: z.string().length(6, 'الكود لازم 6 أرقام'),
+  })
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) return c.json({ error: 'بيانات غير صحيحة' }, 400)
+
+  const { phone, otp } = parsed.data
+  const otpKey = `otp:${phone}`
+  const stored = await c.env.MANDOUBAK_KV.get(otpKey)
+
+  if (!stored) {
+    return c.json({ error: 'الكود انتهت صلاحيته أو لم يُرسل — اطلب كود جديد' }, 400)
+  }
+  if (stored !== otp) {
+    return c.json({ error: 'الكود غلط، جرب تاني' }, 400)
+  }
+
+  // حذف الكود بعد التحقق الناجح
+  await c.env.MANDOUBAK_KV.delete(otpKey)
+
+  return c.json({ success: true, message: 'تم التحقق من الرقم بنجاح ✅' })
+})
+
+// =====================
 // POST /api/auth/update-courier-info - تحديث بيانات المندوب بعد رفع البطاقة
 // =====================
 authRouter.post('/update-courier-info', async (c) => {
@@ -292,4 +405,82 @@ authRouter.post('/update-courier-info', async (c) => {
     .eq('id', String(payload.userId))
 
   return c.json({ success: true, message: 'تم تحديث البيانات وهيتراجع الأدمن' })
+})
+
+// =====================
+// POST /api/auth/create-admin - إنشاء حساب أدمن (يحتاج مفتاح سري)
+// =====================
+authRouter.post('/create-admin', async (c) => {
+  let body: unknown
+  try { body = await c.req.json() } catch {
+    return c.json({ error: 'بيانات غير صحيحة' }, 400)
+  }
+
+  const schema = z.object({
+    adminSecret: z.string().min(1),
+    phone: z.string().regex(/^01[0-9]{9}$/),
+    password: z.string().min(8),
+    name: z.string().min(3).max(100),
+  })
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) return c.json({ error: 'بيانات ناقصة أو غلط' }, 400)
+
+  // التحقق من المفتاح السري
+  const expectedSecret = (c.env as Record<string, unknown>).ADMIN_SECRET as string | undefined
+    || 'mandoubak_admin_2024'
+  if (parsed.data.adminSecret !== expectedSecret) {
+    return c.json({ error: 'المفتاح السري غلط' }, 403)
+  }
+
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+
+  // تحقق من وجود الرقم
+  const { data: existing } = await supabase
+    .from('users')
+    .select('id, role')
+    .eq('phone', parsed.data.phone)
+    .single()
+
+  if (existing) {
+    if (existing.role === 'ADMIN') {
+      return c.json({ error: 'الرقم ده بالفعل حساب أدمن' }, 409)
+    }
+    // ترقية الحساب الحالي لأدمن
+    await supabase.from('users').update({ role: 'ADMIN' }).eq('id', existing.id)
+    return c.json({ success: true, message: 'تم ترقية الحساب لأدمن ✅' })
+  }
+
+  const passwordHash = await hashPassword(parsed.data.password)
+  const userId = crypto.randomUUID()
+  const now = new Date().toISOString()
+
+  const { error } = await supabase.from('users').insert({
+    id: userId,
+    clerk_id: `admin_${parsed.data.phone}_${Date.now()}`,
+    phone: parsed.data.phone,
+    name: parsed.data.name,
+    role: 'ADMIN',
+    password_hash: passwordHash,
+    onboarded: true,
+    created_at: now,
+    updated_at: now,
+  })
+
+  if (error) {
+    // fallback بدون password_hash
+    const { error: err2 } = await supabase.from('users').insert({
+      id: userId,
+      clerk_id: `admin_${parsed.data.phone}_${Date.now()}`,
+      phone: parsed.data.phone,
+      name: parsed.data.name,
+      role: 'ADMIN',
+      avatar_url: `__mndwbk__:${JSON.stringify({ ph: passwordHash })}`,
+      onboarded: true,
+      created_at: now,
+      updated_at: now,
+    })
+    if (err2) return c.json({ error: 'فشل إنشاء حساب الأدمن', details: err2.message }, 500)
+  }
+
+  return c.json({ success: true, message: `✅ تم إنشاء حساب الأدمن لـ ${parsed.data.phone}` }, 201)
 })

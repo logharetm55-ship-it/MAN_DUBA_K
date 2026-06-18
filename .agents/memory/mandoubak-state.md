@@ -1,6 +1,6 @@
 ---
 name: Mandoubak project state
-description: Complete delivery platform — custom JWT auth, real data, Arabic RTL UI, admin hidden page
+description: Complete delivery platform — custom JWT auth, real data, Arabic RTL UI, OTP phone verification, admin secure login
 ---
 
 ## Tech Stack
@@ -9,54 +9,62 @@ description: Complete delivery platform — custom JWT auth, real data, Arabic R
 - Auth: Custom JWT (PBKDF2 password hashing via Web Crypto API, no Clerk)
 - CSS utility classes: `.card`, `.btn-primary`, `.btn-secondary`, `.input`, `.input-field`
 
+## Running Locally
+- tsx must be installed globally: `npm install -g tsx` (backend devDep install fails but global works)
+- backend/start.sh uses `tsx` (global) not `npx tsx` to avoid interactive prompt
+
 ## Auth System (NO CLERK)
 - POST /api/auth/register — phone + password + role (CLIENT/COURIER) + address
 - POST /api/auth/login — phone + password → JWT
+- POST /api/auth/send-otp — generates 6-digit OTP, stores in KV (TTL 300s), returns dev_otp in dev mode
+- POST /api/auth/verify-otp — checks OTP from KV, deletes on success
+- POST /api/auth/create-admin — creates/upgrades user to ADMIN; requires adminSecret env var (default: mandoubak_admin_2024)
 - JWT stored in localStorage as `mandoubak_token`, user as `mandoubak_user`
 - JWT_SECRET defaults to 'mandoubak-jwt-secret-2024' if env not set
 - backend/src/lib/jwt-utils.ts — PBKDF2 hash + HS256 JWT (Web Crypto API, zero deps)
+
+## OTP Phone Verification
+- Registration flow: fill form → send OTP → OTP step screen → verify → register completes
+- In dev mode (no Twilio keys): dev_otp returned in API response AND shown in toast (15s duration)
+- Twilio SMS: set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE env vars to enable real SMS
+- KV mock (in-memory Map) used in local dev for OTP storage with TTL
 
 ## Order Types (discriminated union in Zod)
 - SHOPPING: up to 4 shops max, priced by num_shops (base_fee + (shops-1) × price_per_shop)
 - DELIVERY: pickup/delivery addresses + phones, priced by distance (Haversine × price_per_km)
 
-## Admin Access (HIDDEN)
-- URL: /admin-secret (AdminGuard component — must have role=admin in token)
-- Hidden entry: 6 clicks on the مندوبك logo → AdminLoginModal pops up
-- Credentials: username="sallam", password="255009" (frontend-only check in Layout.tsx)
+## Admin Access
+- URL: /admin-secret — AdminGuard shows dark-themed login form if not logged in as admin
+- Admin login: phone + password, checks role === ADMIN in JWT
+- First admin creation: click "إنشاء أول حساب أدمن" in admin login → form with adminSecret
+- POST /api/auth/create-admin with adminSecret (default: mandoubak_admin_2024)
+- AdminGuard no longer uses localStorage mandoubak_admin_session hack — uses real JWT role
 - 4 failed attempts → 30min localStorage lockout + POST /api/security/alert
 - Admin layout has nav tabs: Dashboard, Orders, Couriers, Clients, Pricing, Ads
 - /admin and /admin/* redirect to / (old paths hidden)
 
 ## Courier Flow
-1. Register via /login (register-courier mode) → creates user + courier record (PENDING_REVIEW)
+1. Register via /login (register-courier mode) → OTP → creates user + courier record (PENDING_REVIEW)
 2. Navigate to /courier/register → upload ID card images (front + back via /api/upload)
 3. Admin reviews via /admin-secret/couriers → approve/reject/suspend
 4. Only APPROVED couriers see pending orders; 403 with courierStatus returned otherwise
 
+## Admin Ads Page
+- Fully connected to real API (/api/admin/ads) with Bearer token
+- Create/toggle active/delete operations all use real endpoints
+- Removed DEMO_ADS — all data from database
+
 ## Key Frontend Files
 - `frontend/src/lib/auth-context.tsx` — token + user state, localStorage persistence
-- `frontend/src/pages/auth/Login.tsx` — 4 modes: welcome/login/register-client/register-courier
-- `frontend/src/components/Layout.tsx` — 6-click logo trick, AdminLoginModal, no admin link in nav
-- `frontend/src/App.tsx` — /admin-secret guarded routes + AdminLayout component
-- `frontend/src/pages/OrderPage.tsx` — SHOPPING (ShopCard × 4) + DELIVERY (A→B with phones)
-- `frontend/src/pages/admin/Dashboard.tsx` — real API stats
-- `frontend/src/pages/admin/Couriers.tsx` — real approve/reject/suspend
-- `frontend/src/pages/admin/Clients.tsx` — real client list with active status
-- `frontend/src/pages/admin/Orders.tsx` — real orders with pagination + filters
-- `frontend/src/pages/courier/Dashboard.tsx` — real API, NO demo data, 15s auto-refresh
-- `frontend/src/pages/courier/Register.tsx` — ID upload then review step
+- `frontend/src/pages/auth/Login.tsx` — welcome/login/register-client/register-courier + OTP step
+- `frontend/src/App.tsx` — AdminLoginForm (dark, with create admin) + AdminGuard + AdminLayout
+- `frontend/src/pages/admin/Ads.tsx` — real API, useCallback for loadAds, no demo data
 
 ## Key Backend Files
-- `backend/src/routes/auth.ts` — /api/auth/register + /api/auth/login
+- `backend/src/routes/auth.ts` — register + login + send-otp + verify-otp + create-admin + update-courier-info
 - `backend/src/routes/orders.ts` — SHOPPING/DELIVERY creation + /pending + /accept
 - `backend/src/routes/admin.ts` — couriers, clients, orders, security-alerts, pricing, ads
 - `backend/src/middleware/auth.ts` — JWT verification + requireRole helper
-
-## No Demo Data
-- All demo/fake orders removed from CourierDashboard (was DEMO_PENDING array)
-- All admin pages use real API calls
-- Courier Dashboard auto-refreshes every 15s from /api/orders/pending
 
 ## DB Schema additions (sql/password-auth-migration.sql)
 - users: password_hash, address, last_seen_at
