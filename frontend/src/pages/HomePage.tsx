@@ -1,7 +1,14 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { Package, Truck, Star, Clock, ChevronLeft, ShoppingBag, MapPin, Zap, Shield } from 'lucide-react'
+import { createClient } from '@supabase/supabase-js'
+import { useAuth } from '../lib/auth-context'
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL || '',
+  import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+)
 
 interface AdOffer {
   id: string
@@ -103,19 +110,57 @@ const DEMO_ADS: AdOffer[] = [
 ]
 
 export default function HomePage() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
+  const [ads, setAds] = useState<AdOffer[]>(DEMO_ADS)
+  const [adsLoading, setAdsLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchAds() {
+      if (!import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        setAdsLoading(false)
+        return
+      }
+      try {
+        const { data, error } = await supabase
+          .from('ad_offers')
+          .select('*')
+          .eq('is_active', true)
+          .gte('end_date', new Date().toISOString())
+          .order('click_count', { ascending: false })
+          .limit(12)
+
+        if (!error && data && data.length > 0) {
+          setAds(data)
+        }
+      } catch {
+        // fallback to demo ads
+      } finally {
+        setAdsLoading(false)
+      }
+    }
+    fetchAds()
+  }, [])
 
   async function handleAdClick(ad: AdOffer) {
-    const confirmed = window.confirm(
-      `تأكيد الطلب؟\n\n📦 ${ad.product_name}\n🏪 ${ad.shop_name}\n📍 ${ad.shop_address}${ad.product_price ? `\n💰 ${ad.product_price} جنيه` : ''}\n\nسعر التوصيل سيُحسب تلقائياً`
-    )
-    if (!confirmed) return
+    if (!user) {
+      toast.error('سجّل دخولك أول عشان تطلب')
+      navigate('/login')
+      return
+    }
 
-    setLoading(true)
-    setTimeout(() => {
-      toast.success('✅ تم تسجيل طلبك! جاري البحث عن مندوب...')
-      setLoading(false)
-    }, 800)
+    navigate('/order', {
+      state: {
+        adOffer: ad,
+        prefill: {
+          type: 'SHOPPING',
+          pickupLat: ad.shop_lat,
+          pickupLng: ad.shop_lng,
+          pickupDetails: `${ad.product_name} من ${ad.shop_name}`,
+        }
+      }
+    })
   }
 
   return (
@@ -176,50 +221,65 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {DEMO_ADS.map(ad => (
-            <div
-              key={ad.id}
-              className="card overflow-hidden p-0 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-              onClick={() => handleAdClick(ad)}
-            >
-              <div className="relative">
-                <img
-                  src={ad.image_url}
-                  alt={ad.title}
-                  className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
-                  onError={e => {
-                    (e.target as HTMLImageElement).src = 'https://placehold.co/400x250/f97316/white?text=عرض'
-                  }}
-                />
-                {ad.product_price && (
-                  <div className="absolute top-3 left-3 bg-orange-500 text-white font-black px-3 py-1 rounded-xl text-sm shadow-lg">
-                    {ad.product_price} جنيه
+        {adsLoading ? (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="card overflow-hidden p-0 animate-pulse">
+                <div className="w-full h-44 bg-gray-200" />
+                <div className="p-4 space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-3/4" />
+                  <div className="h-3 bg-gray-200 rounded w-1/2" />
+                  <div className="h-10 bg-gray-200 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {ads.map(ad => (
+              <div
+                key={ad.id}
+                className="card overflow-hidden p-0 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+                onClick={() => handleAdClick(ad)}
+              >
+                <div className="relative">
+                  <img
+                    src={ad.image_url}
+                    alt={ad.title}
+                    className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={e => {
+                      (e.target as HTMLImageElement).src = 'https://placehold.co/400x250/f97316/white?text=عرض'
+                    }}
+                  />
+                  {ad.product_price && (
+                    <div className="absolute top-3 left-3 bg-orange-500 text-white font-black px-3 py-1 rounded-xl text-sm shadow-lg">
+                      {ad.product_price} جنيه
+                    </div>
+                  )}
+                  <div className="absolute top-3 right-3 bg-black/50 text-white text-xs px-2 py-1 rounded-lg flex items-center gap-1">
+                    <Clock size={12} />
+                    {ad.click_count} طلب
                   </div>
-                )}
-                <div className="absolute top-3 right-3 bg-black/50 text-white text-xs px-2 py-1 rounded-lg flex items-center gap-1">
-                  <Clock size={12} />
-                  {ad.click_count} طلب
+                </div>
+                <div className="p-4">
+                  <h3 className="font-bold text-gray-900 mb-1 line-clamp-2">{ad.title}</h3>
+                  <div className="flex items-center gap-1 text-gray-500 text-sm mb-3">
+                    <MapPin size={14} />
+                    <span className="truncate">{ad.shop_name}</span>
+                  </div>
+                  <button
+                    disabled={loading}
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                    onClick={e => { e.stopPropagation(); handleAdClick(ad) }}
+                  >
+                    <ShoppingBag size={16} />
+                    اطلب دلوقتي
+                  </button>
                 </div>
               </div>
-              <div className="p-4">
-                <h3 className="font-bold text-gray-900 mb-1 line-clamp-2">{ad.title}</h3>
-                <div className="flex items-center gap-1 text-gray-500 text-sm mb-3">
-                  <MapPin size={14} />
-                  <span className="truncate">{ad.shop_name}</span>
-                </div>
-                <button
-                  disabled={loading}
-                  className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-                  onClick={e => { e.stopPropagation(); handleAdClick(ad) }}
-                >
-                  <ShoppingBag size={16} />
-                  اطلب دلوقتي
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* How it works */}
