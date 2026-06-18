@@ -159,11 +159,26 @@ ordersRouter.post('/', requireRole('CLIENT', 'ADMIN'), async (c) => {
     }
   }
 
-  const { data: order, error: orderError } = await supabase
+  let { data: order, error: orderError } = await supabase
     .from('orders')
     .insert(orderData)
     .select()
     .single()
+
+  // لو فشل بسبب عمود ناقص (num_shops أو recipient_phone) → جرّب بدونهم
+  if (orderError && (orderError.code === 'PGRST204' || orderError.message?.includes('column'))) {
+    console.warn('Pre-migration fallback: removing unsupported columns from order insert')
+    const fallbackData = { ...orderData }
+    delete fallbackData.num_shops
+    delete fallbackData.recipient_phone
+    const fallback = await supabase
+      .from('orders')
+      .insert(fallbackData)
+      .select()
+      .single()
+    order = fallback.data
+    orderError = fallback.error
+  }
 
   if (orderError || !order) {
     console.error('Order creation error:', orderError)
@@ -217,7 +232,7 @@ ordersRouter.get('/pending', requireRole('COURIER', 'ADMIN'), async (c) => {
 
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
-  const { data: orders, error } = await supabase
+  let { data: orders, error } = await supabase
     .from('orders')
     .select(`
       id, order_number, type, status,
@@ -230,6 +245,25 @@ ordersRouter.get('/pending', requireRole('COURIER', 'ADMIN'), async (c) => {
     .eq('status', 'PENDING')
     .order('created_at', { ascending: false })
     .limit(50)
+
+  // لو فشل بسبب أعمدة ناقصة → جرّب بدونهم
+  if (error && (error.code === 'PGRST204' || error.message?.includes('column'))) {
+    const fallback = await supabase
+      .from('orders')
+      .select(`
+        id, order_number, type, status,
+        pickup_lat, pickup_lng, delivery_lat, delivery_lng,
+        pickup_details, delivery_details,
+        distance_km, delivery_fee, notes,
+        created_at,
+        order_items (name, quantity, shop_name)
+      `)
+      .eq('status', 'PENDING')
+      .order('created_at', { ascending: false })
+      .limit(50)
+    orders = fallback.data
+    error = fallback.error
+  }
 
   if (error) return c.json({ error: 'مقدرناش نجيب الأوردرات' }, 500)
 
