@@ -1,0 +1,91 @@
+اولا باسورد  الداتا بيز alisallam255009
+ثانيا ملف ال env 
+# ============================================================
+# مندوبك - Mandoubak Delivery Platform
+# ============================================================
+
+# === Supabase ===
+SUPABASE_URL=https://klvceioawopljarpujnp.supabase.co
+SUPABASE_ANON_KEY=حط_هنا_anon_public_key_من_Supabase_Settings_API
+SUPABASE_SERVICE_ROLE_KEY=حط_هنا_service_role_key_من_Supabase_Settings_API
+DATABASE_URL="file:./dev.db"
+JWT_SECRET="any_random_secret_123"
+PORT=8787
+DATABASE_URL="postgresql://postgres.klvceioawopljarpujnp:lisallam25500940%aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://postgres.klvceioawopljarpujnp:lisallam25500940%aws-0-eu-west-1.supabase.com:5432/postgres"
+# Connect to Postgres via the shared session-mode pooler - للمايجريشن
+DIRECT_URL="postgresql://postgres.lisallam255009:lisallam255009@aws-0-eu-west-1.supabase.co:5432/postgres"
+# === Clerk Auth - لازم تجيبهم من Clerk Dashboard ===
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_Z2xvd2luZy1wb2xsaXdvZy0yOC5jbGVyay5hY2NvdW50cy5kZXYk
+CLERK_SECRET_KEY=sk_test_lk7bqRUxFflc2wbmcGmOqGXFp6c1HnU3mFe5n87qPf
+CLERK_WEBHOOK_SECRET=whsec_pMBmDGvYV0sqW2LUSOeIYSjQtVhg8Ce7
+# === Cloudflare - سيبها فاضية دلوقتي ===
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_API_TOKEN=
+KV_NAMESPACE_ID
+KV_BINDING=MANDOUBAK_KV
+R2_BUCKET_NAME=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_ENDPOINT=
+R2_PUBLIC_URL=
+
+# === App Config ===
+NODE_ENV=development
+APP_URL=http://localhost:3000
+API_URL=http://localhost:5000
+JWT_SECRET=mand0ubak_jwt_secret_123456789
+
+# === Google Maps API - سيبها فاضية دلوقتي ===
+GOOGLE_MAPS_API_KEY=
+
+  ثالثا كود البريسما
+1. Install ORM
+Add the ORM to your project.
+Code:
+File: Code
+```
+npm install prisma --save-dev
+```
+
+File: Code
+```
+npx prisma init
+```
+
+2. Configure ORM
+Set up your ORM configuration.
+Code:
+File: .env.local
+```
+# Connect to Postgres via the shared transaction-mode pooler (IPv4-only)
+DATABASE_URL="postgresql://postgres.klvceioawopljarpujnp:[YOUR-PASSWORD]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+
+# Connect to Postgres via the shared session-mode pooler (used for migrations)
+DIRECT_URL="postgresql://postgres.klvceioawopljarpujnp:[YOUR-PASSWORD]@aws-0-eu-west-1.pooler.supabase.com:5432/postgres"
+```
+
+File: prisma/schema.prisma
+```
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+```
+
+3. Install Agent Skills (Optional)
+Agent Skills give AI coding tools ready-made instructions, scripts, and resources for working with Supabase more accurately and efficiently.
+Details:
+npx skills add supabase/agent-skills
+Code:
+File: Code
+```
+npx skills add supabase/agent-skills
+```
+
+حل جميع المشاكل و طلعلى ملف  env  كامل ب الباسورد مظبوط
