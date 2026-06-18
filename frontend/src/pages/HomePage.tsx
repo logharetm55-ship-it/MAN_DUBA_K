@@ -118,10 +118,15 @@ export default function HomePage() {
 
   useEffect(() => {
     async function fetchAds() {
-      if (!import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+
+      // لو المفتاح مش موجود أو نص وصفي، استخدم البيانات التجريبية فوراً
+      if (!anonKey || !anonKey.startsWith('eyJ') || !supabaseUrl) {
         setAdsLoading(false)
         return
       }
+
       try {
         const { data, error } = await supabase
           .from('ad_offers')
