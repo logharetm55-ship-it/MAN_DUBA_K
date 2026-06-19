@@ -167,7 +167,8 @@ export default function LoginPage() {
     setLoading(true)
     pendingRoleRef.current = 'CLIENT'
     try {
-      const { error } = await supabase.auth.signUp({
+      console.log('[signUp] جاري التسجيل...', email.trim())
+      const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
@@ -176,21 +177,32 @@ export default function LoginPage() {
         },
       })
 
+      console.log('[signUp] result:', { user: data?.user?.id, error: error?.message })
+
       if (error) {
+        console.error('[signUp] error:', error)
         if (error.message.includes('already registered') || error.message.includes('User already registered')) {
           toast.error('الإيميل ده مستخدم بالفعل — سجل دخول')
         } else if (error.message.includes('Password should be')) {
           toast.error('الباسورد ضعيف — استخدم 8 حروف وأرقام')
+        } else if (error.message.includes('signup')) {
+          toast.error('التسجيل بالإيميل مش مفعّل في Supabase — فعّل Email Provider')
         } else {
-          toast.error(error.message || 'فشل التسجيل')
+          toast.error(`خطأ: ${error.message}`)
         }
         return
       }
 
-      setSentEmail(email.trim())
-      setMode('email-sent')
-    } catch {
-      toast.error('مشكلة في الاتصال، جرب تاني')
+      if (data?.user) {
+        console.log('[signUp] ✅ يوزر اتسجل:', data.user.id, '| confirmed:', data.user.email_confirmed_at)
+        setSentEmail(email.trim())
+        setMode('email-sent')
+      } else {
+        toast.error('فشل التسجيل — حاول تاني')
+      }
+    } catch (e) {
+      console.error('[signUp] catch:', e)
+      toast.error('مشكلة في الاتصال — تأكد من الـ Supabase URL و ANON KEY')
     } finally {
       setLoading(false)
     }
