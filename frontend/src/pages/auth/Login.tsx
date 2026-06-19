@@ -195,6 +195,11 @@ export default function LoginPage() {
           toast.error('التسجيل بالإيميل مش مفعّل — فعّل Email Provider في Supabase')
         } else if (error.message.includes('rate limit') || error.status === 429) {
           toast.error('كتير أوي — انتظر دقيقة وحاول تاني')
+        } else if (
+          error.message.toLowerCase().includes('sending confirmation email') ||
+          error.message.toLowerCase().includes('email') && error.message.toLowerCase().includes('send')
+        ) {
+          toast.error('مشكلة في إرسال إيميل التأكيد — ادخل على Supabase Dashboard وشغّل Custom SMTP أو عطّل تأكيد الإيميل', { duration: 6000 })
         } else {
           toast.error(`خطأ في التسجيل: ${error.message}`)
         }
@@ -259,6 +264,11 @@ export default function LoginPage() {
           toast.error('الإيميل ده مستخدم بالفعل — سجل دخول')
         } else if (error.message.includes('Password should be')) {
           toast.error('الباسورد ضعيف — استخدم 8 حروف وأرقام')
+        } else if (
+          error.message.toLowerCase().includes('sending confirmation email') ||
+          (error.message.toLowerCase().includes('email') && error.message.toLowerCase().includes('send'))
+        ) {
+          toast.error('مشكلة في إرسال إيميل التأكيد — ادخل على Supabase Dashboard وشغّل Custom SMTP أو عطّل تأكيد الإيميل', { duration: 6000 })
         } else {
           toast.error(error.message || 'فشل التسجيل')
         }
