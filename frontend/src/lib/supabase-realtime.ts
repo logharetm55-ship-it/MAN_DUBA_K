@@ -2,13 +2,9 @@
 // Supabase Realtime - الأوردرات Live للمناديب
 // =============================================================
 
-import { createClient, RealtimeChannel } from '@supabase/supabase-js'
+import { type RealtimeChannel } from '@supabase/supabase-js'
+import { supabase } from './supabase'
 import type { Order } from './api'
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL || '',
-  import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-)
 
 export type RealtimeOrderEvent = {
   type: 'INSERT' | 'UPDATE' | 'DELETE'

@@ -52,32 +52,56 @@ function createKVMock(): KVNamespace {
 }
 
 function createR2Mock(): R2Bucket {
-  const store = new Map<string, { body: ArrayBuffer; httpMetadata?: Record<string, string> }>()
-  
+  // Persist to disk so uploads survive restarts
+  const { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync } = require('fs') as typeof import('fs')
+  const { join } = require('path') as typeof import('path')
+  const R2_DIR = join(process.cwd(), 'public', 'r2-mock')
+  const META_SUFFIX = '.meta.json'
+
+  function keyToPath(key: string) {
+    const safe = key.replace(/[^a-zA-Z0-9._\-/]/g, '_')
+    return join(R2_DIR, safe)
+  }
+
+  function ensureDir(filePath: string) {
+    const { dirname } = require('path') as typeof import('path')
+    const dir = dirname(filePath)
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  }
+
   return {
     put: async (key: string, body: ArrayBuffer, options?: unknown) => {
-      store.set(key, { body, httpMetadata: (options as { httpMetadata?: Record<string, string> })?.httpMetadata })
+      const filePath = keyToPath(key)
+      ensureDir(filePath)
+      writeFileSync(filePath, Buffer.from(body))
+      const meta = (options as { httpMetadata?: Record<string, string> })?.httpMetadata || {}
+      writeFileSync(filePath + META_SUFFIX, JSON.stringify(meta))
       return { key, version: '1', size: body.byteLength, etag: 'mock' } as R2Object
     },
     get: async (key: string) => {
-      const item = store.get(key)
-      if (!item) return null
+      const filePath = keyToPath(key)
+      if (!existsSync(filePath)) return null
+      const data = readFileSync(filePath)
+      const metaRaw = existsSync(filePath + META_SUFFIX) ? readFileSync(filePath + META_SUFFIX, 'utf-8') : '{}'
+      const httpMetadata = JSON.parse(metaRaw)
+      const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
       return {
         key,
         body: new ReadableStream({
-          start(controller) {
-            controller.enqueue(new Uint8Array(item.body))
-            controller.close()
-          }
+          start(controller) { controller.enqueue(new Uint8Array(ab)); controller.close() }
         }),
-        httpMetadata: item.httpMetadata,
-        arrayBuffer: async () => item.body,
+        httpMetadata,
+        arrayBuffer: async () => ab,
         text: async () => '',
       } as unknown as R2ObjectBody
     },
-    delete: async (key: string) => { store.delete(key) },
+    delete: async (key: string) => {
+      const filePath = keyToPath(key)
+      if (existsSync(filePath)) unlinkSync(filePath)
+      if (existsSync(filePath + META_SUFFIX)) unlinkSync(filePath + META_SUFFIX)
+    },
     list: async () => ({ objects: [], truncated: false, cursor: undefined, delimitedPrefixes: [] }),
-    head: async (key: string) => store.has(key) ? { key } as R2Object : null,
+    head: async (key: string) => existsSync(keyToPath(key)) ? { key } as R2Object : null,
     createMultipartUpload: async () => { throw new Error('Not implemented') },
     resumeMultipartUpload: () => { throw new Error('Not implemented') },
   } as unknown as R2Bucket

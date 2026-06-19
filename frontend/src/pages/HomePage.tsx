@@ -2,13 +2,8 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { Package, Truck, Star, Clock, ChevronLeft, ShoppingBag, MapPin, Zap, Shield, User } from 'lucide-react'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth-context'
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL || '',
-  import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-)
 
 interface AdOffer {
   id: string
