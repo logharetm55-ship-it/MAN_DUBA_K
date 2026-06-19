@@ -14,6 +14,7 @@ const mockEnv = {
   CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET || '',
   JWT_SECRET: process.env.JWT_SECRET || 'dev-secret',
   NODE_ENV: process.env.NODE_ENV || 'development',
+  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
   // KV mock (in-memory)
   MANDOUBAK_KV: createKVMock(),
   // R2 mock

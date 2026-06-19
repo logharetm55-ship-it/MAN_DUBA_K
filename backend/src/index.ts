@@ -27,6 +27,7 @@ export type Env = {
   JWT_SECRET: string
   NODE_ENV: string
   ALLOWED_ORIGINS?: string
+  RESEND_API_KEY?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()

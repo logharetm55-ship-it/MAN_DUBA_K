@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import { getSupabaseClient } from '../lib/supabase'
 import { hashPassword, verifyPassword, signJWT } from '../lib/jwt-utils'
+import { sendEmail, welcomeEmailHtml } from '../lib/resend'
 import type { Env } from '../index'
 
 export const authRouter = new Hono<{ Bindings: Env }>()
@@ -146,6 +147,18 @@ authRouter.post('/register', zValidator('json', registerSchema), async (c) => {
       } catch { /* best-effort */ }
     })()
   }
+
+  // إرسال إيميل ترحيب لو عنده إيميل (async)
+  ;(async () => {
+    const resendKey = (c.env as Record<string, unknown>).RESEND_API_KEY as string | undefined
+    if (resendKey && email) {
+      await sendEmail(resendKey, {
+        to: email,
+        subject: 'أهلاً بك في مندوبك! 🛵',
+        html: welcomeEmailHtml(newUser.name, role),
+      })
+    }
+  })()
 
   // توكن JWT
   const token = await signJWT({
@@ -513,6 +526,18 @@ authRouter.post('/sync-email-user', async (c) => {
       return c.json({ error: 'فشل إنشاء الحساب، جرب تاني' }, 500)
     }
     userData = newUser
+
+    // إرسال إيميل ترحيب عبر Resend (async)
+    ;(async () => {
+      const resendKey = (c.env as Record<string, unknown>).RESEND_API_KEY as string | undefined
+      if (resendKey && email) {
+        await sendEmail(resendKey, {
+          to: email,
+          subject: 'أهلاً بك في مندوبك! 🛵',
+          html: welcomeEmailHtml(name, role),
+        })
+      }
+    })()
 
     // لو مندوب → إنشاء سجل courier
     if (role === 'COURIER') {
