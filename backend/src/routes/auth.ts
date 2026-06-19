@@ -109,18 +109,42 @@ authRouter.post('/register', zValidator('json', registerSchema), async (c) => {
     return c.json({ error: 'فشل التسجيل، جرب تاني' }, 500)
   }
 
-  // لو مندوب → إنشاء سجل courier
+  // لو مندوب → إنشاء سجل courier + إشعار لكل الأدمن
   if (role === 'COURIER') {
+    const now = new Date().toISOString()
     const courierInsert: Record<string, unknown> = {
+      id: crypto.randomUUID(),
       user_id: newUser.id,
       name: name || userName,
       phone,
       status: 'PENDING_REVIEW',
+      address: address || '',
+      id_front_image_url: '',
+      id_back_image_url: '',
+      created_at: now,
+      updated_at: now,
     }
-    const { error: cErr } = await supabase.from('couriers').insert({ ...courierInsert, address: address || '' }).select().single()
-    if (cErr && (cErr.code === 'PGRST204' || cErr.message?.includes('column'))) {
-      await supabase.from('couriers').insert(courierInsert).select().single()
+    const { error: cErr } = await supabase.from('couriers').insert(courierInsert)
+    if (cErr) {
+      console.error('Courier insert error:', cErr.code, cErr.message?.slice(0, 100))
     }
+
+    // إشعار لكل الأدمن بتسجيل مندوب جديد (async)
+    ;(async () => {
+      try {
+        const { data: admins } = await supabase
+          .from('users').select('id').eq('role', 'ADMIN')
+        if (admins && admins.length > 0) {
+          const { createNotification } = await import('./notifications')
+          await Promise.all(admins.map(a => createNotification(
+            supabase, a.id, 'courier',
+            '🛵 مندوب جديد ينتظر الموافقة',
+            `${name || userName} (${phone}) سجّل وعايز موافقتك — اعتمده من صفحة المناديب`,
+            '⏳'
+          )))
+        }
+      } catch { /* best-effort */ }
+    })()
   }
 
   // توكن JWT

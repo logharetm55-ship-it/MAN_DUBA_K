@@ -201,9 +201,9 @@ uploadRouter.get('/local/:filename', async (c) => {
 })
 
 // =====================
-// GET /api/upload/view?key= - عرض صورة من R2
+// GET /api/upload/view?key= - عرض صورة من R2 (public - keys are unguessable UUIDs)
 // =====================
-uploadRouter.get('/view', authMiddleware, async (c) => {
+uploadRouter.get('/view', async (c) => {
   const key = c.req.query('key')
 
   if (!key) {

@@ -92,6 +92,80 @@ app.route('/api/admin', adminRouter)
 app.route('/api/users', usersRouter)
 app.route('/api/notifications', notificationsRouter)
 
+// =============================================================
+// GET /api/setup - إنشاء الجداول المطلوبة تلقائياً (يُشغَّل مرة واحدة)
+// =============================================================
+app.get('/api/setup', async (c) => {
+  const supabaseUrl = c.env.SUPABASE_URL
+  const supabaseKey = c.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!supabaseUrl || !supabaseKey) {
+    return c.json({ error: 'Supabase غير مهيأ' }, 500)
+  }
+
+  const results: Record<string, string> = {}
+
+  // إنشاء جدول notifications
+  try {
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/exec_sql`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({
+        query: `
+          CREATE TABLE IF NOT EXISTS notifications (
+            id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            type       TEXT NOT NULL DEFAULT 'system',
+            title      TEXT NOT NULL,
+            message    TEXT NOT NULL,
+            icon       TEXT,
+            is_read    BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+          CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, created_at DESC);
+          ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='notifications' AND policyname='notif_all') THEN
+              CREATE POLICY notif_all ON notifications FOR ALL USING (TRUE) WITH CHECK (TRUE);
+            END IF;
+          END $$;
+        `,
+      }),
+    })
+    results.notifications = res.ok ? '✅ تم إنشاء جدول notifications' : `⚠️ ${res.status}`
+  } catch (e) {
+    results.notifications = `❌ ${e}`
+  }
+
+  // إنشاء accept_order function
+  try {
+    const { getSupabaseClient } = await import('./lib/supabase')
+    const supabase = getSupabaseClient(supabaseUrl, supabaseKey)
+    const { error } = await supabase.rpc('exec_sql', {
+      query: `
+        CREATE OR REPLACE FUNCTION accept_order(p_order_id UUID, p_courier_id UUID)
+        RETURNS JSON LANGUAGE plpgsql AS $$
+        DECLARE v_order RECORD;
+        BEGIN
+          SELECT * INTO v_order FROM orders WHERE id = p_order_id FOR UPDATE;
+          IF NOT FOUND THEN RETURN json_build_object('success', false, 'message', 'الأوردر مش موجود'); END IF;
+          IF v_order.status != 'PENDING' THEN RETURN json_build_object('success', false, 'message', 'الأوردر اتحجز'); END IF;
+          UPDATE orders SET courier_id=p_courier_id, status='ACCEPTED', accepted_at=NOW(), updated_at=NOW() WHERE id=p_order_id;
+          RETURN json_build_object('success', true, 'message', 'تم قبول الأوردر');
+        END; $$;
+      `,
+    })
+    results.accept_order_fn = error ? `⚠️ ${error.code}` : '✅ accept_order function جاهزة'
+  } catch (e) {
+    results.accept_order_fn = `❌ ${e}`
+  }
+
+  return c.json({ success: true, results, note: 'شغّل sql/full-setup.sql في Supabase SQL Editor للإعداد الكامل' })
+})
+
 // Security alerts (public write, admin read handled inside adminRouter)
 app.post('/api/security/alert', async (c) => {
   try {

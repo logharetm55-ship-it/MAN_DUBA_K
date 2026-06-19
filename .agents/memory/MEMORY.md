@@ -1,1 +1,2 @@
 - [Mandoubak project state](mandoubak-state.md) — complete delivery platform, all pages built, Demo Mode (no Clerk keys needed), Arabic RTL UI
+- [Supabase insert pattern](supabase-insert-pattern.md) — all tables need explicit id/created_at/updated_at on insert (no DB defaults)

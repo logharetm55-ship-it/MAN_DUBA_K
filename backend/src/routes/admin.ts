@@ -120,12 +120,28 @@ adminRouter.patch('/couriers/:id/approve', async (c) => {
   const { status } = parsed.data
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
-  const { error } = await supabase
+  const { data: updatedCourier, error } = await supabase
     .from('couriers')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', courierId)
+    .select('user_id, name')
+    .single()
 
   if (error) return c.json({ error: 'مقدرناش نحدث الحالة' }, 500)
+
+  // إشعار للمندوب بنتيجة المراجعة
+  if (updatedCourier?.user_id) {
+    const { createNotification } = await import('./notifications')
+    const notifMap = {
+      APPROVED: { title: '🎉 تمت الموافقة على حسابك', message: 'مبروك! حسابك كمندوب تمت الموافقة عليه — يمكنك الآن قبول الطلبات وبدء العمل', icon: '✅' },
+      REJECTED: { title: '❌ تم رفض حسابك', message: 'للأسف تم رفض طلب انضمامك — تواصل معنا لمعرفة السبب', icon: '❌' },
+      SUSPENDED: { title: '⏸️ تم إيقاف حسابك مؤقتاً', message: 'تم إيقاف حسابك مؤقتاً — تواصل مع الإدارة', icon: '⚠️' },
+    }
+    const notif = notifMap[status as keyof typeof notifMap]
+    if (notif) {
+      createNotification(supabase, updatedCourier.user_id, 'courier', notif.title, notif.message, notif.icon).catch(() => {})
+    }
+  }
 
   return c.json({
     success: true,

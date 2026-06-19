@@ -116,6 +116,8 @@ ordersRouter.post('/', requireRole('CLIENT', 'ADMIN'), async (c) => {
       delivery_fee: priceResult.finalFee,
       notes: notes || null,
       num_shops: numShops,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     }
 
     // تحويل الـ shops لـ order_items
@@ -160,6 +162,8 @@ ordersRouter.post('/', requireRole('CLIENT', 'ADMIN'), async (c) => {
       delivery_fee: priceResult.finalFee,
       notes: notes || null,
       num_shops: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     }
   }
 
@@ -192,7 +196,7 @@ ordersRouter.post('/', requireRole('CLIENT', 'ADMIN'), async (c) => {
   // إضافة الـ items
   if (orderItems.length > 0) {
     const { error: itemsError } = await supabase.from('order_items').insert(
-      orderItems.map(item => ({ ...item, order_id: order.id }))
+      orderItems.map(item => ({ ...item, id: crypto.randomUUID(), order_id: order.id }))
     )
     if (itemsError) {
       console.error('Order items error:', itemsError)
@@ -210,6 +214,26 @@ ordersRouter.post('/', requireRole('CLIENT', 'ADMIN'), async (c) => {
     `طلبك ${orderNumber} قيد الانتظار — سيتولاه أقرب مندوب قريباً`,
     '📦'
   ).catch(() => {})
+
+  // إشعار لكل المناديب المعتمدين بوجود أوردر جديد (async — لا تأخر الرد)
+  ;(async () => {
+    try {
+      const { data: approvedCouriers } = await supabase
+        .from('couriers')
+        .select('user_id')
+        .eq('status', 'APPROVED')
+      if (approvedCouriers && approvedCouriers.length > 0) {
+        await Promise.all(
+          approvedCouriers.map(c => createNotification(
+            supabase, c.user_id, 'order',
+            '🛵 أوردر جديد — احجزه الأول!',
+            `طلب ${orderNumber} متاح دلوقتي — كن أول من يقبله`,
+            '🔔'
+          ))
+        )
+      }
+    } catch { /* best-effort */ }
+  })()
 
   return c.json({ success: true, order, message: 'تم تسجيل الطلب بنجاح!' }, 201)
 })
@@ -308,23 +332,75 @@ ordersRouter.post('/:id/accept', requireRole('COURIER'), async (c) => {
     return c.json({ error: 'حسابك لسه تحت المراجعة' }, 403)
   }
 
+  // مندوب واحد = أوردر واحد فقط في نفس الوقت
+  const { data: activeOrder } = await supabase
+    .from('orders')
+    .select('id, order_number')
+    .eq('courier_id', courier.id)
+    .in('status', ['ACCEPTED', 'PICKED_UP'])
+    .limit(1)
+    .single()
+
+  if (activeOrder) {
+    return c.json({
+      success: false,
+      error: `عندك أوردر شغّال (${(activeOrder as { order_number?: string }).order_number}) — سلّمه الأول وبعدين خد أوردر جديد`,
+    }, 409)
+  }
+
   const lockResult = await acquireOrderLock(c.env.MANDOUBAK_KV, orderId, courier.id)
   if (!lockResult.acquired) {
     return c.json({ success: false, error: 'الأوردر اتحجز من مندوب تاني', message: lockResult.reason }, 409)
   }
 
   try {
-    const { data: result, error } = await supabase
+    // أول محاولة: استخدام الـ RPC
+    let accepted = false
+    let acceptError: string | null = null
+
+    const { data: rpcResult, error: rpcErr } = await supabase
       .rpc('accept_order', { p_order_id: orderId, p_courier_id: courier.id })
 
-    if (error) {
-      await releaseOrderLock(c.env.MANDOUBAK_KV, orderId)
-      return c.json({ error: 'خطأ في قبول الأوردر' }, 500)
+    if (!rpcErr && rpcResult) {
+      if (!rpcResult.success) {
+        await releaseOrderLock(c.env.MANDOUBAK_KV, orderId)
+        return c.json({ success: false, error: rpcResult.message }, 409)
+      }
+      accepted = true
+    } else {
+      // Fallback: تحديث مباشر لو RPC مش موجود
+      console.warn('[accept_order] RPC error — using direct update fallback:', rpcErr?.code)
+
+      // تأكد إن الأوردر لسه PENDING
+      const { data: currentOrder } = await supabase
+        .from('orders').select('status').eq('id', orderId).single()
+
+      if (!currentOrder || currentOrder.status !== 'PENDING') {
+        await releaseOrderLock(c.env.MANDOUBAK_KV, orderId)
+        return c.json({ success: false, error: 'الأوردر مش متاح للحجز' }, 409)
+      }
+
+      const { error: updateErr } = await supabase
+        .from('orders')
+        .update({
+          courier_id: courier.id,
+          status: 'ACCEPTED',
+          accepted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', orderId)
+        .eq('status', 'PENDING') // atomic check
+
+      if (updateErr) {
+        acceptError = updateErr.message
+      } else {
+        accepted = true
+      }
     }
 
-    if (!result.success) {
+    if (!accepted) {
       await releaseOrderLock(c.env.MANDOUBAK_KV, orderId)
-      return c.json({ success: false, error: result.message }, 409)
+      return c.json({ error: acceptError || 'خطأ في قبول الأوردر' }, 500)
     }
 
     await invalidatePendingOrdersCache(c.env.MANDOUBAK_KV)
