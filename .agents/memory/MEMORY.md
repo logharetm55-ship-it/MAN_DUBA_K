@@ -1,2 +1,4 @@
 - [Mandoubak project state](mandoubak-state.md) — complete delivery platform, all pages built, Demo Mode (no Clerk keys needed), Arabic RTL UI
 - [Supabase insert pattern](supabase-insert-pattern.md) — all tables need explicit id/created_at/updated_at on insert (no DB defaults)
+- [Notifications fallback](notifications-fallback.md) — notifications table doesn't exist in Supabase; use in-memory Map store as fallback; createNotification writes to memory first, tries DB second
+- [R2 mock setup](r2-mock-setup.md) — server.ts has createR2Mock() that stores files in backend/public/r2-mock/; upload/view endpoint reads from this mock locally

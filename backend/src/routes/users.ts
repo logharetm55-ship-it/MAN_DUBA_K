@@ -31,11 +31,12 @@ usersRouter.get('/me', authMiddleware, async (c) => {
 // PATCH /api/users/me - تحديث بيانات اليوزر
 usersRouter.patch('/me', authMiddleware, async (c) => {
   const authUser = c.get('user')
-  const body = await c.req.json() as { name?: string; phone?: string }
+  const body = await c.req.json() as { name?: string; phone?: string; address?: string }
 
   const allowed: Record<string, unknown> = {}
   if (body.name) allowed.name = body.name
   if (body.phone) allowed.phone = body.phone
+  if (body.address !== undefined) allowed.address = body.address
   allowed.updated_at = new Date().toISOString()
 
   const { createClient } = await import('@supabase/supabase-js')

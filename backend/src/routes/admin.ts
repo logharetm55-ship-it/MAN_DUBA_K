@@ -328,12 +328,14 @@ adminRouter.post('/ads', async (c) => {
 
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
   const { data, error } = await supabase.from('ad_offers').insert({
+    id: crypto.randomUUID(),
     title: parsed.data.title, description: parsed.data.description,
     image_url: parsed.data.imageUrl, shop_name: parsed.data.shopName,
     shop_address: parsed.data.shopAddress, shop_lat: parsed.data.shopLat,
     shop_lng: parsed.data.shopLng, product_name: parsed.data.productName,
     product_price: parsed.data.productPrice, start_date: parsed.data.startDate,
     end_date: parsed.data.endDate, is_active: true,
+    click_count: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   }).select().single()
 
   if (error) return c.json({ error: 'مقدرناش ننشر العرض' }, 500)
