@@ -1,114 +1,99 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Package, MapPin, Clock, Star, ChevronLeft, Truck, ShoppingBag } from 'lucide-react'
+import { Package, MapPin, Clock, Star, ChevronLeft, Truck, ShoppingBag, Loader2, RefreshCw } from 'lucide-react'
 import { useAuth } from '../lib/auth-context'
+import toast from 'react-hot-toast'
+
+interface OrderItem {
+  name: string
+  quantity: number
+  shop_name?: string
+}
 
 interface Order {
   id: string
-  orderNumber: string
+  order_number: string
   type: 'SHOPPING' | 'DELIVERY'
   status: 'PENDING' | 'ACCEPTED' | 'PICKED_UP' | 'DELIVERED' | 'CANCELLED'
-  deliveryFee: number
-  pickupDetails: string
-  deliveryDetails: string
-  courier?: { name: string; rating: number; phone: string }
-  items?: { name: string; quantity: number }[]
-  createdAt: Date
-  rated?: boolean
+  delivery_fee: number
+  pickup_details: string
+  delivery_details: string
+  notes?: string
+  distance_km?: number
+  created_at: string
+  order_items?: OrderItem[]
+  couriers?: { name: string; rating: number; phone: string } | null
 }
 
-const DEMO_ORDERS: Order[] = [
-  {
-    id: 'ord-1',
-    orderNumber: 'ORD-1718001-ABCD',
-    type: 'SHOPPING',
-    status: 'DELIVERED',
-    deliveryFee: 25,
-    pickupDetails: 'برجر تاون - التحرير',
-    deliveryDetails: 'شارع النيل، عمارة 15',
-    courier: { name: 'محمد علي', rating: 4.8, phone: '01012345678' },
-    items: [{ name: 'وجبة برجر كاملة', quantity: 2 }],
-    createdAt: new Date(Date.now() - 3600000 * 2),
-    rated: false,
-  },
-  {
-    id: 'ord-2',
-    orderNumber: 'ORD-1717002-EFGH',
-    type: 'DELIVERY',
-    status: 'ACCEPTED',
-    deliveryFee: 40,
-    pickupDetails: 'شارع الهرم، الجيزة',
-    deliveryDetails: 'مدينة نصر',
-    courier: { name: 'خالد حسن', rating: 4.6, phone: '01098765432' },
-    createdAt: new Date(Date.now() - 900000),
-    rated: false,
-  },
-  {
-    id: 'ord-3',
-    orderNumber: 'ORD-1716003-IJKL',
-    type: 'SHOPPING',
-    status: 'PENDING',
-    deliveryFee: 30,
-    pickupDetails: 'كشري الحلوة - الهرم',
-    deliveryDetails: 'المعادي',
-    items: [{ name: 'كيلو كشري', quantity: 1 }],
-    createdAt: new Date(Date.now() - 300000),
-    rated: false,
-  },
-  {
-    id: 'ord-4',
-    orderNumber: 'ORD-1715004-MNOP',
-    type: 'SHOPPING',
-    status: 'DELIVERED',
-    deliveryFee: 20,
-    pickupDetails: 'بيتزا كينج - العباسية',
-    deliveryDetails: 'شبرا',
-    courier: { name: 'أحمد سمير', rating: 4.9, phone: '01234567890' },
-    items: [{ name: 'بيتزا مارجريتا', quantity: 1 }],
-    createdAt: new Date(Date.now() - 86400000),
-    rated: true,
-  },
-  {
-    id: 'ord-5',
-    orderNumber: 'ORD-1714005-QRST',
-    type: 'DELIVERY',
-    status: 'CANCELLED',
-    deliveryFee: 35,
-    pickupDetails: 'مصر الجديدة',
-    deliveryDetails: 'الزمالك',
-    createdAt: new Date(Date.now() - 172800000),
-    rated: false,
-  },
-]
-
 const STATUS_MAP = {
-  PENDING: { label: 'في الانتظار', color: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-400' },
-  ACCEPTED: { label: 'المندوب في الطريق 🛵', color: 'bg-blue-100 text-blue-700', dot: 'bg-blue-400' },
+  PENDING:   { label: 'في الانتظار ⏳', color: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-400' },
+  ACCEPTED:  { label: 'المندوب في الطريق 🛵', color: 'bg-blue-100 text-blue-700', dot: 'bg-blue-400' },
   PICKED_UP: { label: 'تم الاستلام 📦', color: 'bg-indigo-100 text-indigo-700', dot: 'bg-indigo-400' },
   DELIVERED: { label: 'تم التوصيل ✅', color: 'bg-green-100 text-green-700', dot: 'bg-green-400' },
   CANCELLED: { label: 'ملغي ❌', color: 'bg-red-100 text-red-700', dot: 'bg-red-400' },
 }
 
 export default function MyOrders() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const [filter, setFilter] = useState<string>('ALL')
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
   const [ratingOrder, setRatingOrder] = useState<string | null>(null)
   const [rating, setRating] = useState(5)
   const [ratingNote, setRatingNote] = useState('')
-  const [orders, setOrders] = useState(DEMO_ORDERS)
+  const [ratedIds, setRatedIds] = useState<Set<string>>(new Set())
+
+  const loadOrders = useCallback(async () => {
+    if (!token) return
+    setLoading(true)
+    try {
+      const res = await fetch('/api/orders/my', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setOrders(data.orders || [])
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || 'فشل تحميل الطلبات')
+      }
+    } catch {
+      toast.error('مشكلة في الاتصال')
+    } finally {
+      setLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => { loadOrders() }, [loadOrders])
+
+  // تحديث تلقائي للأوردرات النشطة كل 15 ثانية
+  useEffect(() => {
+    const hasActive = orders.some(o => o.status === 'PENDING' || o.status === 'ACCEPTED' || o.status === 'PICKED_UP')
+    if (!hasActive) return
+    const interval = setInterval(loadOrders, 15000)
+    return () => clearInterval(interval)
+  }, [orders, loadOrders])
 
   const filtered = filter === 'ALL' ? orders : orders.filter(o => o.status === filter)
 
-  function submitRating(orderId: string) {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, rated: true } : o))
+  async function submitRating(orderId: string) {
+    if (!token) return
+    try {
+      await fetch(`/api/orders/${orderId}/rate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ rating, note: ratingNote }),
+      })
+    } catch { /* best effort */ }
+    setRatedIds(prev => new Set([...prev, orderId]))
     setRatingOrder(null)
     setRating(5)
     setRatingNote('')
-    alert('شكراً على تقييمك! ⭐')
+    toast.success('شكراً على تقييمك! ⭐')
   }
 
-  function timeAgo(date: Date) {
-    const mins = Math.floor((Date.now() - date.getTime()) / 60000)
+  function timeAgo(dateStr: string) {
+    const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000)
     if (mins < 1) return 'الآن'
     if (mins < 60) return `منذ ${mins} دقيقة`
     const hours = Math.floor(mins / 60)
@@ -116,15 +101,29 @@ export default function MyOrders() {
     return `منذ ${Math.floor(hours / 24)} يوم`
   }
 
+  if (!user) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-gray-500">سجّل دخول الأول</p>
+        <Link to="/login" className="mt-3 inline-block btn-primary">دخول</Link>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-5">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-black flex items-center gap-2">
-          <Package className="text-orange-500" size={26} />
-          طلباتي
-        </h1>
-        {user && <p className="text-gray-500 text-sm">مرحباً {user.name} 👋</p>}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black flex items-center gap-2">
+            <Package className="text-orange-500" size={26} />
+            طلباتي
+          </h1>
+          {user && <p className="text-gray-500 text-sm">مرحباً {user.name} 👋</p>}
+        </div>
+        <button onClick={loadOrders} className="p-2 hover:bg-gray-100 rounded-xl">
+          <RefreshCw size={18} className={`text-gray-500 ${loading ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {/* Filter */}
@@ -143,37 +142,50 @@ export default function MyOrders() {
         ))}
       </div>
 
-      {/* Orders */}
-      {filtered.length === 0 ? (
+      {/* Loading */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16 gap-3 text-gray-400">
+          <Loader2 className="animate-spin" size={24} />
+          <span>جاري تحميل طلباتك...</span>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="text-center py-16">
           <Package size={56} className="mx-auto mb-3 text-gray-200" />
-          <p className="text-gray-500 font-semibold">مفيش طلبات في هذه الفئة</p>
-          <Link to="/order" className="mt-4 inline-block text-orange-500 font-bold">+ طلب جديد</Link>
+          <p className="text-gray-500 font-semibold">
+            {filter === 'ALL' ? 'مفيش طلبات لحد دلوقتي' : 'مفيش طلبات في هذه الفئة'}
+          </p>
+          {filter === 'ALL' && (
+            <Link to="/order" className="mt-4 inline-block text-orange-500 font-bold">+ اطلب دلوقتي</Link>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
           {filtered.map(order => {
             const statusInfo = STATUS_MAP[order.status]
             const isActive = order.status === 'ACCEPTED' || order.status === 'PICKED_UP'
+            const isPending = order.status === 'PENDING'
+            const isRated = ratedIds.has(order.id)
 
             return (
-              <div key={order.id} className={`card ${isActive ? 'border-2 border-blue-300' : ''}`}>
+              <div key={order.id} className={`card ${isActive ? 'border-2 border-blue-300' : ''} ${isPending ? 'border border-yellow-200' : ''}`}>
                 {/* Header */}
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${order.type === 'SHOPPING' ? 'bg-orange-100' : 'bg-blue-100'}`}>
-                      {order.type === 'SHOPPING' ? <ShoppingBag className="text-orange-500" size={18} /> : <Truck className="text-blue-500" size={18} />}
+                      {order.type === 'SHOPPING'
+                        ? <ShoppingBag className="text-orange-500" size={18} />
+                        : <Truck className="text-blue-500" size={18} />}
                     </div>
                     <div>
-                      <div className="font-bold text-sm">{order.orderNumber}</div>
+                      <div className="font-bold text-sm">{order.order_number}</div>
                       <div className="text-xs text-gray-400 flex items-center gap-1">
                         <Clock size={10} />
-                        {timeAgo(order.createdAt)}
+                        {timeAgo(order.created_at)}
                       </div>
                     </div>
                   </div>
                   <div className="text-left">
-                    <div className="font-black text-orange-600">{order.deliveryFee} ج</div>
+                    <div className="font-black text-orange-600">{order.delivery_fee} ج</div>
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${statusInfo.color}`}>
                       {statusInfo.label}
                     </span>
@@ -181,10 +193,13 @@ export default function MyOrders() {
                 </div>
 
                 {/* Items */}
-                {order.items && order.items.length > 0 && (
-                  <div className="bg-gray-50 rounded-xl p-3 mb-3 text-sm">
-                    {order.items.map((item, i) => (
-                      <div key={i} className="text-gray-700">• {item.name} × {item.quantity}</div>
+                {order.order_items && order.order_items.length > 0 && (
+                  <div className="bg-gray-50 rounded-xl p-3 mb-3 text-sm space-y-0.5">
+                    {order.order_items.map((item, i) => (
+                      <div key={i} className="text-gray-700">
+                        • {item.name} × {item.quantity}
+                        {item.shop_name && <span className="text-gray-400 text-xs"> ({item.shop_name})</span>}
+                      </div>
                     ))}
                   </div>
                 )}
@@ -192,31 +207,38 @@ export default function MyOrders() {
                 {/* Route */}
                 <div className="flex items-center gap-1 text-xs text-gray-500 mb-3">
                   <MapPin size={12} className="text-orange-400 flex-shrink-0" />
-                  <span className="truncate">{order.pickupDetails}</span>
+                  <span className="truncate">{order.pickup_details}</span>
                   <span className="text-gray-300 mx-1">←</span>
-                  <span className="truncate">{order.deliveryDetails}</span>
+                  <span className="truncate">{order.delivery_details}</span>
                 </div>
 
+                {/* Notes */}
+                {order.notes && (
+                  <div className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2 mb-3">
+                    📝 {order.notes}
+                  </div>
+                )}
+
                 {/* Courier Info */}
-                {order.courier && (
+                {order.couriers && (
                   <div className="flex items-center gap-3 bg-blue-50 rounded-xl p-3 mb-3">
                     <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-lg">🛵</div>
                     <div className="flex-1">
-                      <div className="font-bold text-sm">{order.courier.name}</div>
+                      <div className="font-bold text-sm">{order.couriers.name}</div>
                       <div className="flex items-center gap-1 text-xs text-gray-500">
                         <Star size={10} className="text-yellow-400 fill-yellow-400" />
-                        {order.courier.rating.toFixed(1)}
+                        {(order.couriers.rating || 0).toFixed(1)}
                       </div>
                     </div>
-                    <a href={`tel:${order.courier.phone}`}
+                    <a href={`tel:${order.couriers.phone}`}
                       className="bg-white border border-blue-200 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-xl hover:bg-blue-50 transition-all">
                       📞 اتصال
                     </a>
                   </div>
                 )}
 
-                {/* Active Order Progress */}
-                {isActive && (
+                {/* Active Progress Bar */}
+                {(isActive || isPending) && (
                   <div className="mb-3">
                     <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
                       <span>تم الطلب</span>
@@ -229,26 +251,28 @@ export default function MyOrders() {
                         const steps = ['PENDING', 'ACCEPTED', 'PICKED_UP', 'DELIVERED']
                         const current = steps.indexOf(order.status)
                         return (
-                          <div key={s} className={`h-2 flex-1 rounded-full ${i <= current ? 'bg-blue-500' : 'bg-gray-200'}`} />
+                          <div key={s} className={`h-2 flex-1 rounded-full transition-all ${i <= current ? 'bg-blue-500' : 'bg-gray-200'}`} />
                         )
                       })}
                     </div>
-                    <Link to={`/track/${order.id}`}
-                      className="mt-2 block text-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2.5 rounded-xl text-sm transition-all">
-                      🗺️ تابع الطلب مباشرة
-                    </Link>
+                    {isActive && (
+                      <Link to={`/track/${order.id}`}
+                        className="mt-2 block text-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-2.5 rounded-xl text-sm transition-all">
+                        🗺️ تابع الطلب مباشرة
+                      </Link>
+                    )}
                   </div>
                 )}
 
                 {/* Rate Button */}
-                {order.status === 'DELIVERED' && !order.rated && (
+                {order.status === 'DELIVERED' && !isRated && order.couriers && (
                   <button onClick={() => setRatingOrder(order.id)}
                     className="w-full bg-yellow-50 border border-yellow-200 text-yellow-700 font-bold py-2.5 rounded-xl text-sm hover:bg-yellow-100 transition-all flex items-center justify-center gap-2">
                     <Star size={16} className="fill-yellow-500 text-yellow-500" />
                     قيّم المندوب
                   </button>
                 )}
-                {order.rated && (
+                {(order.status === 'DELIVERED' && isRated) && (
                   <div className="text-center text-green-600 text-sm font-semibold">
                     ⭐ تم التقييم - شكراً!
                   </div>

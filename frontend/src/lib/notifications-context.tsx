@@ -1,13 +1,18 @@
-import { createContext, useContext, useState, ReactNode } from 'react'
+// =============================================================
+// Notifications Context - إشعارات حقيقية من الـ API
+// =============================================================
+
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import { useAuth } from './auth-context'
 
 export interface Notification {
   id: string
+  type: 'order' | 'courier' | 'system' | 'success'
   title: string
   message: string
-  type: 'order' | 'courier' | 'system' | 'success'
+  icon?: string
   read: boolean
   createdAt: Date
-  icon?: string
 }
 
 interface NotificationsContextType {
@@ -16,6 +21,7 @@ interface NotificationsContextType {
   addNotification: (n: Omit<Notification, 'id' | 'read' | 'createdAt'>) => void
   markAllRead: () => void
   markRead: (id: string) => void
+  refresh: () => void
 }
 
 const NotificationsContext = createContext<NotificationsContextType>({
@@ -24,40 +30,84 @@ const NotificationsContext = createContext<NotificationsContextType>({
   addNotification: () => {},
   markAllRead: () => {},
   markRead: () => {},
+  refresh: () => {},
 })
 
-const DEMO_NOTIFICATIONS: Notification[] = [
-  { id: '1', title: 'طلبك قيد التوصيل 🛵', message: 'محمد المندوب في طريقه إليك - ETA 15 دقيقة', type: 'order', read: false, createdAt: new Date(Date.now() - 300000), icon: '🛵' },
-  { id: '2', title: 'تم قبول طلبك ✅', message: 'مندوب قبل طلبك رقم ORD-1718001-ABCD', type: 'success', read: false, createdAt: new Date(Date.now() - 600000), icon: '✅' },
-  { id: '3', title: 'عرض جديد 🔥', message: 'بيتزا مارجريتا بـ 89 جنيه - عرض لليوم فقط!', type: 'system', read: true, createdAt: new Date(Date.now() - 3600000), icon: '🍕' },
-  { id: '4', title: 'تم التوصيل 🎉', message: 'طلبك ORD-1718000 اتسلم بنجاح!', type: 'success', read: true, createdAt: new Date(Date.now() - 86400000), icon: '🎉' },
-]
-
 export function NotificationsProvider({ children }: { children: ReactNode }) {
-  const [notifications, setNotifications] = useState<Notification[]>(DEMO_NOTIFICATIONS)
+  const { token, isLoggedIn } = useAuth()
+  const [notifications, setNotifications] = useState<Notification[]>([])
 
-  const unreadCount = notifications.filter(n => !n.read).length
+  const fetchNotifications = useCallback(async () => {
+    if (!token || !isLoggedIn) return
+    try {
+      const res = await fetch('/api/notifications', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      const items: Notification[] = (data.notifications || []).map((n: {
+        id: string; type: string; title: string; message: string;
+        icon?: string; is_read: boolean; created_at: string
+      }) => ({
+        id: n.id,
+        type: (n.type as Notification['type']) || 'system',
+        title: n.title,
+        message: n.message,
+        icon: n.icon,
+        read: n.is_read,
+        createdAt: new Date(n.created_at),
+      }))
+      setNotifications(items)
+    } catch { /* silent */ }
+  }, [token, isLoggedIn])
+
+  useEffect(() => {
+    if (!isLoggedIn) { setNotifications([]); return }
+    fetchNotifications()
+    const interval = setInterval(fetchNotifications, 30000)
+    return () => clearInterval(interval)
+  }, [isLoggedIn, fetchNotifications])
+
+  async function markRead(id: string) {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+    if (!token) return
+    try {
+      await fetch(`/api/notifications/read/${id}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    } catch { /* silent */ }
+  }
+
+  async function markAllRead() {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    if (!token) return
+    try {
+      await fetch('/api/notifications/read-all', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    } catch { /* silent */ }
+  }
 
   function addNotification(n: Omit<Notification, 'id' | 'read' | 'createdAt'>) {
     const notification: Notification = {
       ...n,
-      id: Date.now().toString(),
+      id: `local_${Date.now()}`,
       read: false,
       createdAt: new Date(),
     }
     setNotifications(prev => [notification, ...prev])
   }
 
-  function markAllRead() {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-  }
-
-  function markRead(id: string) {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
-  }
+  const unreadCount = notifications.filter(n => !n.read).length
 
   return (
-    <NotificationsContext.Provider value={{ notifications, unreadCount, addNotification, markAllRead, markRead }}>
+    <NotificationsContext.Provider value={{
+      notifications, unreadCount,
+      addNotification, markAllRead, markRead,
+      refresh: fetchNotifications,
+    }}>
       {children}
     </NotificationsContext.Provider>
   )

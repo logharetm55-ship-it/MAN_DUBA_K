@@ -9,7 +9,7 @@ import {
   Outlet, Link, useLocation as useLoc
 } from 'react-router-dom'
 import {
-  ShieldCheck, Package, Users, Truck, TrendingUp, Megaphone, Home as HomeIcon
+  ShieldCheck, Package, Users, Truck, TrendingUp, Megaphone, Home as HomeIcon, LogOut
 } from 'lucide-react'
 
 import Layout from './components/Layout'
@@ -263,6 +263,8 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
 // =============================================================
 function AdminLayout() {
   const location = useLoc()
+  const { logout, user } = useAuth()
+  const navigate = useNavigate()
 
   const links = [
     { to: '/admin-secret', label: 'الرئيسية', icon: <HomeIcon size={18} />, exact: true },
@@ -278,12 +280,29 @@ function AdminLayout() {
       ? location.pathname === to
       : location.pathname === to || location.pathname.startsWith(to + '/')
 
+  async function handleLogout() {
+    await logout()
+    navigate('/', { replace: true })
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-purple-700 text-white px-4 py-3">
-        <div className="max-w-4xl mx-auto flex items-center gap-3">
-          <ShieldCheck size={24} />
-          <span className="font-black text-lg">لوحة أدمن مندوبك</span>
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <ShieldCheck size={24} />
+            <span className="font-black text-lg">لوحة أدمن مندوبك</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-purple-300 text-sm hidden sm:block">{user?.name}</span>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 bg-purple-800 hover:bg-purple-900 px-3 py-1.5 rounded-xl text-sm font-bold transition-all"
+            >
+              <LogOut size={15} />
+              خروج
+            </button>
+          </div>
         </div>
       </div>
       <div className="bg-purple-600 text-white px-4">

@@ -310,16 +310,14 @@ authRouter.post('/send-otp', async (c) => {
     } catch { /* ignore */ }
   }
 
-  // في وضع التطوير: نرجع الكود في الـ response عشان يتجرب
-  const isDev = c.env.NODE_ENV === 'development' || !twilioSid
-  console.log(`[OTP] ${phone} → ${otp}`)
+  // الكود يتسجل في الـ server console فقط (مش يتبعت للـ frontend)
+  console.log(`[OTP DEV] ${phone} → ${otp}  (صالح 5 دقائق)`)
 
   return c.json({
     success: true,
     message: smsSent
-      ? `تم إرسال الكود على رقم ${phone}`
-      : `تم إنشاء الكود — راجع الـ console`,
-    ...(isDev && { dev_otp: otp }),
+      ? `✅ تم إرسال كود التحقق على ${phone}`
+      : `📋 تم إنشاء الكود — مش عندنا SMS Provider دلوقتي`,
     smsSent,
   })
 })

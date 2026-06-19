@@ -16,6 +16,7 @@ import {
   invalidatePendingOrdersCache,
 } from '../lib/kv-lock'
 import { calculateDistance, calculateDeliveryFee, calculateShoppingFee, detectZone } from '../lib/pricing'
+import { createNotification } from './notifications'
 
 export const ordersRouter = new Hono<{ Bindings: Env }>()
 
@@ -202,6 +203,14 @@ ordersRouter.post('/', requireRole('CLIENT', 'ADMIN'), async (c) => {
 
   await invalidatePendingOrdersCache(c.env.MANDOUBAK_KV)
 
+  // إشعار للعميل بتأكيد الطلب
+  createNotification(
+    supabase, user.userId, 'order',
+    '✅ تم استلام طلبك',
+    `طلبك ${orderNumber} قيد الانتظار — سيتولاه أقرب مندوب قريباً`,
+    '📦'
+  ).catch(() => {})
+
   return c.json({ success: true, order, message: 'تم تسجيل الطلب بنجاح!' }, 201)
 })
 
@@ -321,6 +330,22 @@ ordersRouter.post('/:id/accept', requireRole('COURIER'), async (c) => {
     await invalidatePendingOrdersCache(c.env.MANDOUBAK_KV)
     await releaseOrderLock(c.env.MANDOUBAK_KV, orderId)
 
+    // إشعار للعميل أن مندوب قبل طلبه
+    const { data: acceptedOrder } = await supabase
+      .from('orders')
+      .select('client_id, order_number, couriers(name)')
+      .eq('id', orderId)
+      .single()
+    if (acceptedOrder) {
+      const courierName = (acceptedOrder.couriers as { name?: string } | null)?.name || 'المندوب'
+      createNotification(
+        supabase, acceptedOrder.client_id, 'success',
+        `🛵 ${courierName} في طريقه إليك`,
+        `طلبك ${acceptedOrder.order_number} تم قبوله وسيصلك قريباً`,
+        '🛵'
+      ).catch(() => {})
+    }
+
     return c.json({ success: true, message: 'تم قبول الأوردر بنجاح!', orderId })
   } catch (err) {
     await releaseOrderLock(c.env.MANDOUBAK_KV, orderId)
@@ -395,7 +420,12 @@ ordersRouter.patch('/:id/status', requireRole('COURIER', 'ADMIN'), async (c) => 
   if (status === 'DELIVERED') updates.completed_at = new Date().toISOString()
   if (status === 'CANCELLED') updates.cancelled_at = new Date().toISOString()
 
-  const { error } = await supabase.from('orders').update(updates).eq('id', orderId)
+  const { data: updatedOrder, error } = await supabase
+    .from('orders')
+    .update(updates)
+    .eq('id', orderId)
+    .select('client_id, order_number')
+    .single()
   if (error) return c.json({ error: 'مقدرناش نحدث الحالة' }, 500)
 
   if (status === 'DELIVERED' && user.role === 'COURIER') {
@@ -405,6 +435,34 @@ ordersRouter.patch('/:id/status', requireRole('COURIER', 'ADMIN'), async (c) => 
       await supabase.from('couriers')
         .update({ total_deliveries: (courier.total_deliveries || 0) + 1 })
         .eq('id', courier.id)
+    }
+  }
+
+  // إشعار للعميل بتغيير الحالة
+  if (updatedOrder) {
+    const statusMessages: Record<string, { title: string; message: string; icon: string }> = {
+      PICKED_UP: {
+        title: '📦 تم استلام طلبك',
+        message: `المندوب استلم طلبك ${updatedOrder.order_number} وفي الطريق إليك`,
+        icon: '📦',
+      },
+      DELIVERED: {
+        title: '🎉 تم التوصيل بنجاح',
+        message: `طلبك ${updatedOrder.order_number} وصل! شكراً لاستخدامك مندوبك`,
+        icon: '🎉',
+      },
+      CANCELLED: {
+        title: '❌ تم إلغاء الطلب',
+        message: `طلبك ${updatedOrder.order_number} تم إلغاؤه`,
+        icon: '❌',
+      },
+    }
+    const notifData = statusMessages[status]
+    if (notifData) {
+      createNotification(
+        supabase, updatedOrder.client_id, status === 'DELIVERED' ? 'success' : 'order',
+        notifData.title, notifData.message, notifData.icon
+      ).catch(() => {})
     }
   }
 

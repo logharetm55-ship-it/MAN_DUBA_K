@@ -14,6 +14,7 @@ import { pricingRouter } from './routes/pricing'
 import { uploadRouter } from './routes/upload'
 import { usersRouter } from './routes/users'
 import { authRouter } from './routes/auth'
+import { notificationsRouter } from './routes/notifications'
 import { authMiddleware } from './middleware/auth'
 
 export type Env = {
@@ -89,6 +90,7 @@ app.route('/api/orders', ordersRouter)
 app.route('/api/couriers', couriersRouter)
 app.route('/api/admin', adminRouter)
 app.route('/api/users', usersRouter)
+app.route('/api/notifications', notificationsRouter)
 
 // Security alerts (public write, admin read handled inside adminRouter)
 app.post('/api/security/alert', async (c) => {

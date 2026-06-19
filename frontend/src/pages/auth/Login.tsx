@@ -67,11 +67,7 @@ export default function LoginPage() {
       }
       setPendingRole(role)
       setOtpStep(true)
-      if (data.dev_otp) {
-        toast.success(`🔑 كود التطوير: ${data.dev_otp}`, { duration: 15000 })
-      } else {
-        toast.success(`📱 تم إرسال الكود على ${cleanPhone}`)
-      }
+      toast.success(`📱 تم إرسال كود التحقق على ${cleanPhone}`)
       return true
     } catch {
       toast.error('مشكلة في الاتصال، جرب تاني')
@@ -125,11 +121,7 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (res.ok) {
-        if (data.dev_otp) {
-          toast.success(`🔑 كود جديد: ${data.dev_otp}`, { duration: 15000 })
-        } else {
-          toast.success('تم إرسال كود جديد!')
-        }
+        toast.success('📱 تم إرسال كود جديد!')
       } else {
         toast.error(data.error || 'فشل إعادة الإرسال')
       }
