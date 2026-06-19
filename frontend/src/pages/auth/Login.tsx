@@ -177,24 +177,42 @@ export default function LoginPage() {
         },
       })
 
-      console.log('[signUp] result:', { user: data?.user?.id, error: error?.message })
+      console.log('[signUp] result:', { user: data?.user?.id, identities: data?.user?.identities?.length, error: error?.message })
 
       if (error) {
         console.error('[signUp] error:', error)
-        if (error.message.includes('already registered') || error.message.includes('User already registered')) {
+        if (
+          error.message.includes('already registered') ||
+          error.message.includes('User already registered') ||
+          error.message.includes('already been registered')
+        ) {
+          // إيميل موجود + متأكد — وجّهه لتسجيل الدخول
           toast.error('الإيميل ده مستخدم بالفعل — سجل دخول')
-        } else if (error.message.includes('Password should be')) {
+          setTimeout(() => setMode('login'), 1500)
+        } else if (error.message.includes('Password should be') || error.message.includes('weak')) {
           toast.error('الباسورد ضعيف — استخدم 8 حروف وأرقام')
-        } else if (error.message.includes('signup')) {
-          toast.error('التسجيل بالإيميل مش مفعّل في Supabase — فعّل Email Provider')
+        } else if (error.message.includes('signup') || error.message.includes('Signups not allowed')) {
+          toast.error('التسجيل بالإيميل مش مفعّل — فعّل Email Provider في Supabase')
+        } else if (error.message.includes('rate limit') || error.status === 429) {
+          toast.error('كتير أوي — انتظر دقيقة وحاول تاني')
         } else {
-          toast.error(`خطأ: ${error.message}`)
+          toast.error(`خطأ في التسجيل: ${error.message}`)
         }
         return
       }
 
+      // Supabase بيعمل email enumeration protection:
+      // لو الإيميل موجود بالفعل غير متأكد → يرجّع user بدون identities
+      if (data?.user && data.user.identities?.length === 0) {
+        console.log('[signUp] email already exists (unconfirmed) — offering resend')
+        setSentEmail(email.trim())
+        setMode('email-sent')
+        toast('الإيميل ده موجود — بعتنالك رابط تأكيد جديد', { icon: '📧' })
+        return
+      }
+
       if (data?.user) {
-        console.log('[signUp] ✅ يوزر اتسجل:', data.user.id, '| confirmed:', data.user.email_confirmed_at)
+        console.log('[signUp] ✅ يوزر اتسجل:', data.user.id, '| email:', data.user.email)
         setSentEmail(email.trim())
         setMode('email-sent')
       } else {
