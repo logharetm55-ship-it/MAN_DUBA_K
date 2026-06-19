@@ -686,3 +686,75 @@ authRouter.post('/create-admin', async (c) => {
 
   return c.json({ success: true, message: `✅ تم إنشاء حساب الأدمن لـ ${parsed.data.phone}` }, 201)
 })
+
+// =====================
+// POST /api/auth/confirm-by-email — تأكيد الإيميل بالبحث عنه (للـ login الأول)
+// =====================
+authRouter.post('/confirm-by-email', async (c) => {
+  let body: unknown
+  try { body = await c.req.json() } catch {
+    return c.json({ error: 'بيانات غير صحيحة' }, 400)
+  }
+
+  const schema = z.object({ email: z.string().email() })
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) return c.json({ error: 'إيميل غير صحيح' }, 400)
+
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+
+  // البحث عن اليوزر بالإيميل
+  const { data: { users }, error: listErr } = await supabase.auth.admin.listUsers()
+  if (listErr) {
+    console.error('[confirm-by-email] listUsers error:', listErr.message)
+    return c.json({ error: 'فشل البحث عن المستخدم' }, 500)
+  }
+
+  const user = users.find(u => u.email?.toLowerCase() === parsed.data.email.toLowerCase())
+  if (!user) return c.json({ error: 'المستخدم غير موجود' }, 404)
+
+  if (user.email_confirmed_at) {
+    return c.json({ success: true, message: 'الإيميل مؤكد بالفعل' })
+  }
+
+  const { error: updateErr } = await supabase.auth.admin.updateUserById(user.id, {
+    email_confirm: true,
+  })
+
+  if (updateErr) {
+    console.error('[confirm-by-email] update error:', updateErr.message)
+    return c.json({ error: 'فشل تأكيد الإيميل' }, 500)
+  }
+
+  console.log('[confirm-by-email] ✅ confirmed:', parsed.data.email)
+  return c.json({ success: true, message: 'تم تأكيد الإيميل ✅' })
+})
+
+// =====================
+// POST /api/auth/auto-confirm — تأكيد إيميل المستخدم تلقائياً (بديل SMTP)
+// يُستخدم بعد signUp مباشرةً لحل مشكلة "Email not confirmed"
+// =====================
+authRouter.post('/auto-confirm', async (c) => {
+  let body: unknown
+  try { body = await c.req.json() } catch {
+    return c.json({ error: 'بيانات غير صحيحة' }, 400)
+  }
+
+  const schema = z.object({
+    userId: z.string().uuid('userId غير صحيح'),
+  })
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) return c.json({ error: 'userId مطلوب' }, 400)
+
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+
+  const { error } = await supabase.auth.admin.updateUserById(parsed.data.userId, {
+    email_confirm: true,
+  })
+
+  if (error) {
+    console.error('[auto-confirm] error:', error.message)
+    return c.json({ error: 'فشل تأكيد الإيميل: ' + error.message }, 500)
+  }
+
+  return c.json({ success: true, message: 'تم تأكيد الإيميل ✅' })
+})

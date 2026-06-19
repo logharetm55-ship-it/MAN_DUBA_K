@@ -126,7 +126,27 @@ export default function LoginPage() {
         if (error.message.includes('Invalid login credentials')) {
           toast.error('الإيميل أو الباسورد غلط')
         } else if (error.message.includes('Email not confirmed')) {
-          toast.error('الإيميل لم يتأكد بعد — راجع صندوق الوارد وافتح رابط التفعيل')
+          // تأكيد تلقائي ثم إعادة المحاولة
+          toast.loading('جاري تأكيد الإيميل تلقائياً...', { id: 'confirming' })
+          const confirmed = await confirmByEmail(email.trim())
+          toast.dismiss('confirming')
+          if (confirmed) {
+            // إعادة المحاولة بعد التأكيد
+            const { data: retryData, error: retryErr } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+            if (retryErr || !retryData?.session) {
+              toast.error('الإيميل أو الباسورد غلط')
+              return
+            }
+            const appUser = await syncWithBackend(retryData.session.access_token)
+            if (!appUser) return
+            toast.success(`أهلاً ${appUser.name}! 👋`)
+            const dest = appUser.role === 'courier' ? '/courier/dashboard'
+              : appUser.role === 'admin' ? '/admin-secret' : '/'
+            navigate(dest, { replace: true })
+            return
+          } else {
+            toast.error('الإيميل لم يتأكد — تواصل مع الدعم')
+          }
         } else {
           toast.error(error.message || 'فشل تسجيل الدخول')
         }
@@ -209,17 +229,15 @@ export default function LoginPage() {
       // Supabase بيعمل email enumeration protection:
       // لو الإيميل موجود بالفعل غير متأكد → يرجّع user بدون identities
       if (data?.user && data.user.identities?.length === 0) {
-        console.log('[signUp] email already exists (unconfirmed) — offering resend')
-        setSentEmail(email.trim())
-        setMode('email-sent')
-        toast('الإيميل ده موجود — بعتنالك رابط تأكيد جديد', { icon: '📧' })
+        console.log('[signUp] email already exists (unconfirmed) — auto-confirming')
+        await autoConfirmAndLogin(data.user.id, email.trim(), password)
         return
       }
 
       if (data?.user) {
         console.log('[signUp] ✅ يوزر اتسجل:', data.user.id, '| email:', data.user.email)
-        setSentEmail(email.trim())
-        setMode('email-sent')
+        // تأكيد الإيميل تلقائياً بدون انتظار رسالة
+        await autoConfirmAndLogin(data.user.id, email.trim(), password)
       } else {
         toast.error('فشل التسجيل — حاول تاني')
       }
@@ -228,6 +246,62 @@ export default function LoginPage() {
       toast.error('مشكلة في الاتصال — تأكد من الـ Supabase URL و ANON KEY')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // ===== تأكيد الإيميل بالإيميل فقط (للدخول بعد التسجيل) =====
+  async function confirmByEmail(emailAddr: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API}/auth/confirm-by-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailAddr }),
+      })
+      return res.ok
+    } catch {
+      return false
+    }
+  }
+
+  // ===== تأكيد الإيميل تلقائياً + تسجيل دخول مباشر =====
+  async function autoConfirmAndLogin(userId: string, emailAddr: string, pass: string) {
+    try {
+      // خطوة 1: تأكيد الإيميل عبر الباكند
+      const confirmRes = await fetch(`${API}/auth/auto-confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+      if (!confirmRes.ok) {
+        const err = await confirmRes.json() as { error?: string }
+        console.warn('[auto-confirm] failed:', err.error)
+        // حتى لو فشل التأكيد، نحاول الدخول
+      }
+
+      // خطوة 2: تسجيل الدخول مباشرة
+      const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
+        email: emailAddr,
+        password: pass,
+      })
+
+      if (loginErr || !loginData?.session) {
+        // لو فشل الدخول المباشر، روّح لصفحة الدخول
+        toast.success('تم التسجيل! سجّل دخولك الآن')
+        setTimeout(() => setMode('login'), 1000)
+        return
+      }
+
+      // خطوة 3: مزامنة مع الباكند
+      const appUser = await syncWithBackend(loginData.session.access_token)
+      if (!appUser) return
+
+      toast.success(`أهلاً ${appUser.name}! 🎉 تم التسجيل والدخول`)
+      const dest = appUser.role === 'courier' ? '/courier/dashboard'
+        : appUser.role === 'admin' ? '/admin-secret' : '/'
+      navigate(dest, { replace: true })
+    } catch {
+      toast.success('تم التسجيل! سجّل دخولك الآن')
+      setTimeout(() => setMode('login'), 1000)
     }
   }
 
@@ -250,7 +324,7 @@ export default function LoginPage() {
     setLoading(true)
     pendingRoleRef.current = 'COURIER'
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
@@ -262,21 +336,20 @@ export default function LoginPage() {
       if (error) {
         if (error.message.includes('already registered') || error.message.includes('User already registered')) {
           toast.error('الإيميل ده مستخدم بالفعل — سجل دخول')
+          setTimeout(() => setMode('login'), 1500)
         } else if (error.message.includes('Password should be')) {
           toast.error('الباسورد ضعيف — استخدم 8 حروف وأرقام')
-        } else if (
-          error.message.toLowerCase().includes('sending confirmation email') ||
-          (error.message.toLowerCase().includes('email') && error.message.toLowerCase().includes('send'))
-        ) {
-          toast.error('مشكلة في إرسال إيميل التأكيد — ادخل على Supabase Dashboard وشغّل Custom SMTP أو عطّل تأكيد الإيميل', { duration: 6000 })
         } else {
           toast.error(error.message || 'فشل التسجيل')
         }
         return
       }
 
-      setSentEmail(email.trim())
-      setMode('email-sent')
+      if (data?.user) {
+        await autoConfirmAndLogin(data.user.id, email.trim(), password)
+      } else {
+        toast.error('فشل التسجيل — حاول تاني')
+      }
     } catch {
       toast.error('مشكلة في الاتصال، جرب تاني')
     } finally {
