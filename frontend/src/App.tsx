@@ -19,6 +19,7 @@ import MyOrders from './pages/MyOrders'
 import TrackOrder from './pages/TrackOrder'
 import Notifications from './pages/Notifications'
 import LoginPage from './pages/auth/Login'
+import AuthCallback from './pages/auth/Callback'
 import OnboardingPage from './pages/Onboarding'
 import ClientProfile from './pages/ClientProfile'
 import CourierDashboard from './pages/courier/Dashboard'
@@ -339,6 +340,7 @@ export default function App() {
       <Routes>
         {/* Full-screen pages */}
         <Route path="/onboarding" element={<OnboardingPage />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
 
         {/* Admin — hidden URL, guarded */}
         <Route

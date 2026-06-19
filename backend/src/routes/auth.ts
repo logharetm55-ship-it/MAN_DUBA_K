@@ -430,6 +430,161 @@ authRouter.post('/update-courier-info', async (c) => {
 })
 
 // =====================
+// POST /api/auth/sync-email-user - مزامنة يوزر Supabase Auth مع users table
+// =====================
+const emailRateLimitMap = new Map<string, { count: number; resetAt: number }>()
+
+function checkEmailRateLimit(ip: string, max = 10, windowMs = 60_000): boolean {
+  const now = Date.now()
+  const current = emailRateLimitMap.get(ip)
+  if (!current || now > current.resetAt) {
+    emailRateLimitMap.set(ip, { count: 1, resetAt: now + windowMs })
+    return true
+  }
+  if (current.count >= max) return false
+  current.count++
+  return true
+}
+
+authRouter.post('/sync-email-user', async (c) => {
+  const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || 'unknown'
+  if (!checkEmailRateLimit(ip)) {
+    return c.json({ error: 'كتير أوي — جرب بعد شوية' }, 429)
+  }
+
+  const authHeader = c.req.header('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return c.json({ error: 'توكن مش موجود' }, 401)
+  }
+  const accessToken = authHeader.split(' ')[1]
+
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+
+  // تحقق من صحة الـ Supabase token
+  const { data: { user: authUser }, error: authErr } = await supabase.auth.getUser(accessToken)
+  if (authErr || !authUser) {
+    return c.json({ error: 'التوكن غلط أو منتهي' }, 401)
+  }
+
+  const email = authUser.email || ''
+  const uid = authUser.id
+  const meta = (authUser.user_metadata || {}) as Record<string, string>
+
+  // تحقق لو اليوزر موجود بالفعل في جدولنا
+  const { data: existing } = await supabase
+    .from('users')
+    .select('id, name, role, address, phone, email, onboarded')
+    .eq('clerk_id', uid)
+    .maybeSingle()
+
+  let userData: Record<string, unknown>
+
+  if (existing) {
+    userData = existing
+  } else {
+    // إنشاء يوزر جديد
+    const role = (meta.role as string) || 'CLIENT'
+    const name = (meta.name as string) || `مستخدم_${email.split('@')[0]}`
+    const address = (meta.address as string) || null
+    const userId = crypto.randomUUID()
+    const now = new Date().toISOString()
+
+    const insertData: Record<string, unknown> = {
+      id: userId,
+      clerk_id: uid,
+      email,
+      phone: null,
+      name,
+      role,
+      address,
+      onboarded: true,
+      created_at: now,
+      updated_at: now,
+    }
+
+    const { data: newUser, error: insertErr } = await supabase
+      .from('users')
+      .insert(insertData)
+      .select('id, name, role, address, phone, email, onboarded')
+      .single()
+
+    if (insertErr || !newUser) {
+      console.error('sync-email-user insert error:', insertErr)
+      return c.json({ error: 'فشل إنشاء الحساب، جرب تاني' }, 500)
+    }
+    userData = newUser
+
+    // لو مندوب → إنشاء سجل courier
+    if (role === 'COURIER') {
+      const courierInsert: Record<string, unknown> = {
+        id: crypto.randomUUID(),
+        user_id: newUser.id,
+        name,
+        phone: email,
+        status: 'PENDING_REVIEW',
+        address: address || '',
+        id_front_image_url: '',
+        id_back_image_url: '',
+        created_at: now,
+        updated_at: now,
+      }
+      const { error: cErr } = await supabase.from('couriers').insert(courierInsert)
+      if (cErr) console.error('Courier sync insert error:', cErr.message?.slice(0, 100))
+
+      // إشعار الأدمن
+      ;(async () => {
+        try {
+          const { data: admins } = await supabase.from('users').select('id').eq('role', 'ADMIN')
+          if (admins && admins.length > 0) {
+            const { createNotification } = await import('./notifications')
+            await Promise.all(admins.map(a => createNotification(
+              supabase, a.id, 'courier',
+              '🛵 مندوب جديد ينتظر الموافقة',
+              `${name} (${email}) سجّل وعايز موافقتك`,
+              '⏳'
+            )))
+          }
+        } catch { /* best-effort */ }
+      })()
+    }
+  }
+
+  // بيانات المندوب لو موجود
+  let courierData = null
+  if ((userData.role as string) === 'COURIER') {
+    const { data: courier } = await supabase
+      .from('couriers')
+      .select('id, status')
+      .eq('user_id', userData.id)
+      .single()
+    courierData = courier
+  }
+
+  // إصدار JWT خاص بنا
+  const token = await signJWT({
+    userId: userData.id,
+    phone: (userData.phone as string) || email,
+    role: userData.role,
+  }, c.env.JWT_SECRET || 'mandoubak-jwt-secret-2024')
+
+  return c.json({
+    success: true,
+    token,
+    user: {
+      id: userData.id,
+      email: userData.email || email,
+      phone: userData.phone || null,
+      name: userData.name,
+      role: userData.role,
+      address: userData.address || null,
+      onboarded: userData.onboarded,
+      courierStatus: (courierData as Record<string, unknown> | null)?.status || null,
+      courierId: (courierData as Record<string, unknown> | null)?.id || null,
+    },
+  })
+})
+
+// =====================
 // POST /api/auth/create-admin - إنشاء حساب أدمن (يحتاج مفتاح سري)
 // =====================
 authRouter.post('/create-admin', async (c) => {
