@@ -2,7 +2,7 @@
 // Login / Register - تسجيل بالإيميل + Supabase Auth
 // =============================================================
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Truck, Mail, Lock, MapPin, User, ArrowLeft,
@@ -13,7 +13,7 @@ import type { AppUser } from '../../lib/auth-context'
 import { supabase } from '../../lib/supabase'
 import toast from 'react-hot-toast'
 
-type Mode = 'welcome' | 'login' | 'register-client' | 'register-courier' | 'forgot' | 'email-sent'
+type Mode = 'welcome' | 'login' | 'register-client' | 'register-courier' | 'forgot' | 'email-sent' | 'verify-otp'
 
 const API = '/api'
 
@@ -59,16 +59,23 @@ export default function LoginPage() {
   const [name, setName] = useState('')
   const [forgotEmail, setForgotEmail] = useState('')
   const [sentEmail, setSentEmail] = useState('')
+  const [otpCode, setOtpCode] = useState('')
+  const [resendCooldown, setResendCooldown] = useState(0)
 
   const pendingRoleRef = useRef<'CLIENT' | 'COURIER'>('CLIENT')
+  const pendingPassRef = useRef('')
+  const pendingUserIdRef = useRef('')
 
-  if (isLoggedIn && user) {
-    const dest = user.role === 'courier'
-      ? '/courier/dashboard'
-      : user.role === 'admin' ? '/admin-secret' : '/'
-    navigate(dest, { replace: true })
-    return null
-  }
+  useEffect(() => {
+    if (isLoggedIn && user) {
+      const dest = user.role === 'courier'
+        ? '/courier/dashboard'
+        : user.role === 'admin' ? '/admin-secret' : '/'
+      navigate(dest, { replace: true })
+    }
+  }, [isLoggedIn, user, navigate])
+
+  if (isLoggedIn) return null
 
   // ===== مزامنة مع الباكند بعد تسجيل الدخول بـ Supabase =====
   async function syncWithBackend(accessToken: string): Promise<AppUser | null> {
@@ -229,15 +236,14 @@ export default function LoginPage() {
       // Supabase بيعمل email enumeration protection:
       // لو الإيميل موجود بالفعل غير متأكد → يرجّع user بدون identities
       if (data?.user && data.user.identities?.length === 0) {
-        console.log('[signUp] email already exists (unconfirmed) — auto-confirming')
-        await autoConfirmAndLogin(data.user.id, email.trim(), password)
+        console.log('[signUp] email already exists (unconfirmed) — sending OTP')
+        await sendOtpAndShowScreen(data.user.id, email.trim(), password)
         return
       }
 
       if (data?.user) {
         console.log('[signUp] ✅ يوزر اتسجل:', data.user.id, '| email:', data.user.email)
-        // تأكيد الإيميل تلقائياً بدون انتظار رسالة
-        await autoConfirmAndLogin(data.user.id, email.trim(), password)
+        await sendOtpAndShowScreen(data.user.id, email.trim(), password)
       } else {
         toast.error('فشل التسجيل — حاول تاني')
       }
@@ -346,10 +352,78 @@ export default function LoginPage() {
       }
 
       if (data?.user) {
-        await autoConfirmAndLogin(data.user.id, email.trim(), password)
+        await sendOtpAndShowScreen(data.user.id, email.trim(), password)
       } else {
         toast.error('فشل التسجيل — حاول تاني')
       }
+    } catch {
+      toast.error('مشكلة في الاتصال، جرب تاني')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ===== إرسال OTP وعرض شاشة التحقق (عبر Supabase المدمج) =====
+  async function sendOtpAndShowScreen(userId: string, emailAddr: string, pass: string) {
+    pendingUserIdRef.current = userId
+    pendingPassRef.current = pass
+    setSentEmail(emailAddr)
+    setOtpCode('')
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: emailAddr,
+      options: { shouldCreateUser: false },
+    })
+
+    if (error) {
+      console.warn('[sendOtp] Supabase OTP failed:', error.message)
+      // fallback: auto-confirm وسجّل الدخول مباشر
+      await autoConfirmAndLogin(userId, emailAddr, pass)
+      return
+    }
+
+    toast.success('📧 تم إرسال كود التأكيد على إيميلك!')
+    setMode('verify-otp')
+    startResendCooldown()
+  }
+
+  function startResendCooldown() {
+    setResendCooldown(60)
+    const iv = setInterval(() => {
+      setResendCooldown(prev => {
+        if (prev <= 1) { clearInterval(iv); return 0 }
+        return prev - 1
+      })
+    }, 1000)
+  }
+
+  // ===== التحقق من OTP =====
+  async function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault()
+    if (otpCode.length !== 6) { toast.error('ادخل الكود المكون من 6 أرقام'); return }
+
+    setLoading(true)
+    try {
+      // التحقق من الكود عبر Supabase مباشرة
+      const { data: verifyData, error: verifyErr } = await supabase.auth.verifyOtp({
+        email: sentEmail,
+        token: otpCode,
+        type: 'email',
+      })
+
+      if (verifyErr || !verifyData?.session) {
+        toast.error('الكود غلط أو انتهت صلاحيته — اضغط "إعادة إرسال"')
+        return
+      }
+
+      // تم التحقق وعندنا session جاهز
+      const appUser = await syncWithBackend(verifyData.session.access_token)
+      if (!appUser) return
+
+      toast.success(`🎉 أهلاً ${appUser.name}! حسابك جاهز`)
+      const dest = appUser.role === 'courier' ? '/courier/dashboard'
+        : appUser.role === 'admin' ? '/admin-secret' : '/'
+      navigate(dest, { replace: true })
     } catch {
       toast.error('مشكلة في الاتصال، جرب تاني')
     } finally {
@@ -623,9 +697,9 @@ export default function LoginPage() {
               />
             </Field>
             <div className="bg-orange-50 border border-orange-200 rounded-2xl p-3 text-center">
-              <span className="text-orange-700 text-xs">📧 هنبعتلك إيميل تأكيد — افتحه عشان تفعّل حسابك</span>
+              <span className="text-orange-700 text-xs">📧 هنبعتلك كود تأكيد 6 أرقام على إيميلك</span>
             </div>
-            <SubmitBtn loading={loading} label="📧 تسجيل وإرسال التأكيد →" />
+            <SubmitBtn loading={loading} label="📨 تسجيل وإرسال الكود →" />
             <BackBtn onClick={() => setMode('welcome')} />
           </form>
         )}
@@ -718,9 +792,74 @@ export default function LoginPage() {
               />
             </Field>
             <div className="bg-orange-50 border border-orange-200 rounded-2xl p-3 text-center">
-              <span className="text-orange-700 text-xs">📧 هنبعتلك إيميل تأكيد — افتحه عشان تفعّل حسابك</span>
+              <span className="text-orange-700 text-xs">📧 هنبعتلك كود تأكيد 6 أرقام على إيميلك</span>
             </div>
-            <SubmitBtn loading={loading} label="📧 تسجيل وإرسال التأكيد →" />
+            <SubmitBtn loading={loading} label="📨 تسجيل وإرسال الكود →" />
+            <BackBtn onClick={() => setMode('welcome')} />
+          </form>
+        )}
+
+        {/* OTP Verification */}
+        {mode === 'verify-otp' && (
+          <form onSubmit={handleVerifyOtp} className="space-y-5">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-orange-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <Mail className="text-orange-500" size={32} />
+              </div>
+              <h2 className="text-xl font-black">تأكيد الإيميل</h2>
+              <p className="text-gray-500 text-sm mt-1">
+                بعتنالك كود مكون من 6 أرقام على:
+              </p>
+              <p className="text-orange-600 font-bold text-sm" dir="ltr">{sentEmail}</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2 text-center">
+                ادخل الكود هنا
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                value={otpCode}
+                onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                dir="ltr"
+                className="w-full text-center text-4xl font-black tracking-[0.5em] py-4 border-2 border-gray-200 rounded-2xl focus:border-orange-400 focus:outline-none bg-gray-50 text-gray-800"
+                autoFocus
+                autoComplete="one-time-code"
+              />
+            </div>
+
+            <SubmitBtn loading={loading} label="✅ تأكيد الحساب والدخول" />
+
+            <div className="text-center">
+              {resendCooldown > 0 ? (
+                <p className="text-gray-400 text-sm">
+                  إعادة الإرسال بعد {resendCooldown} ثانية
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (pendingUserIdRef.current && sentEmail && pendingPassRef.current) {
+                      sendOtpAndShowScreen(pendingUserIdRef.current, sentEmail, pendingPassRef.current)
+                    }
+                  }}
+                  className="text-orange-500 text-sm font-semibold hover:text-orange-700 transition-colors"
+                >
+                  📧 إعادة إرسال الكود
+                </button>
+              )}
+            </div>
+
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
+              <p className="text-blue-600 text-xs">
+                💡 راجع صندوق الـ Spam لو مش لاقي الإيميل
+              </p>
+            </div>
+
             <BackBtn onClick={() => setMode('welcome')} />
           </form>
         )}

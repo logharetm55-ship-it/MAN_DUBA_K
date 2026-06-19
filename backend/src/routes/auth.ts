@@ -7,8 +7,12 @@ import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import { getSupabaseClient } from '../lib/supabase'
 import { hashPassword, verifyPassword, signJWT } from '../lib/jwt-utils'
-import { sendEmail, welcomeEmailHtml } from '../lib/resend'
+import { sendEmail, welcomeEmailHtml, otpEmailHtml } from '../lib/resend'
 import type { Env } from '../index'
+
+// ===== OTP Store (in-memory, 10 min expiry) =====
+interface OtpEntry { code: string; expiresAt: number; userId: string }
+const otpStore = new Map<string, OtpEntry>()
 
 export const authRouter = new Hono<{ Bindings: Env }>()
 
@@ -685,6 +689,91 @@ authRouter.post('/create-admin', async (c) => {
   }
 
   return c.json({ success: true, message: `✅ تم إنشاء حساب الأدمن لـ ${parsed.data.phone}` }, 201)
+})
+
+// =====================
+// POST /api/auth/send-email-otp — إرسال كود تأكيد 6 أرقام للإيميل
+// =====================
+authRouter.post('/send-email-otp', async (c) => {
+  let body: unknown
+  try { body = await c.req.json() } catch {
+    return c.json({ error: 'بيانات غير صحيحة' }, 400)
+  }
+
+  const schema = z.object({
+    email: z.string().email(),
+    userId: z.string().uuid(),
+  })
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) return c.json({ error: 'بيانات غير صحيحة' }, 400)
+
+  const { email, userId } = parsed.data
+
+  // توليد كود 6 أرقام
+  const code = Math.floor(100000 + Math.random() * 900000).toString()
+  const expiresAt = Date.now() + 10 * 60 * 1000 // 10 دقائق
+
+  otpStore.set(email.toLowerCase(), { code, expiresAt, userId })
+
+  const apiKey = c.env.RESEND_API_KEY || process.env.RESEND_API_KEY || ''
+  const sent = await sendEmail(apiKey, {
+    to: email,
+    subject: '🔐 كود تأكيد حسابك على مندوبك',
+    html: otpEmailHtml(code),
+  })
+
+  if (!sent) {
+    console.error('[send-otp] فشل إرسال الإيميل لـ', email)
+    return c.json({ error: 'فشل إرسال الكود — تأكد من الإيميل وحاول تاني' }, 500)
+  }
+
+  console.log('[send-otp] ✅ أُرسل كود لـ', email)
+  return c.json({ success: true, message: 'تم إرسال الكود ✅' })
+})
+
+// =====================
+// POST /api/auth/verify-email-otp — التحقق من الكود وتأكيد الحساب
+// =====================
+authRouter.post('/verify-email-otp', async (c) => {
+  let body: unknown
+  try { body = await c.req.json() } catch {
+    return c.json({ error: 'بيانات غير صحيحة' }, 400)
+  }
+
+  const schema = z.object({
+    email: z.string().email(),
+    code: z.string().length(6),
+  })
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) return c.json({ error: 'بيانات غير صحيحة' }, 400)
+
+  const { email, code } = parsed.data
+  const entry = otpStore.get(email.toLowerCase())
+
+  if (!entry) return c.json({ error: 'الكود غير موجود أو انتهت صلاحيته — أعد إرسال الكود' }, 400)
+  if (Date.now() > entry.expiresAt) {
+    otpStore.delete(email.toLowerCase())
+    return c.json({ error: 'انتهت صلاحية الكود (10 دقائق) — أعد إرسال الكود' }, 400)
+  }
+  if (entry.code !== code) {
+    return c.json({ error: 'الكود غلط — تأكد من الأرقام وحاول تاني' }, 400)
+  }
+
+  // الكود صح → تأكيد الإيميل في Supabase
+  otpStore.delete(email.toLowerCase())
+
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const { error: updateErr } = await supabase.auth.admin.updateUserById(entry.userId, {
+    email_confirm: true,
+  })
+
+  if (updateErr) {
+    console.error('[verify-otp] فشل تأكيد اليوزر:', updateErr.message)
+    return c.json({ error: 'فشل تأكيد الحساب — تواصل مع الدعم' }, 500)
+  }
+
+  console.log('[verify-otp] ✅ تم تأكيد حساب:', email)
+  return c.json({ success: true, message: 'تم تأكيد الحساب ✅' })
 })
 
 // =====================
