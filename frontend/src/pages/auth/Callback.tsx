@@ -1,9 +1,9 @@
 // =============================================================
-// Auth Callback - معالجة تأكيد الإيميل من Supabase
+// Auth Callback - يتعامل مع PKCE (?code=) والـ implicit (#token)
 // =============================================================
 
 import { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Loader2, CheckCircle, XCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth-context'
@@ -14,13 +14,12 @@ const API = '/api'
 
 export default function AuthCallback() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
   const { login } = useAuth()
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
-  const [message, setMessage] = useState('جاري التحقق...')
+  const [message, setMessage] = useState('جاري التحقق من رابط التأكيد...')
   const [newPassword, setNewPassword] = useState('')
-  const [isRecovery, setIsRecovery] = useState(false)
   const [showPasswordForm, setShowPasswordForm] = useState(false)
+  const [errorDetail, setErrorDetail] = useState('')
 
   useEffect(() => {
     handleCallback()
@@ -28,53 +27,93 @@ export default function AuthCallback() {
 
   async function handleCallback() {
     try {
-      const type = searchParams.get('type')
-      const code = searchParams.get('code')
-      const errorParam = searchParams.get('error')
-      const errorDesc = searchParams.get('error_description')
+      // ===== قراءة hash fragment (#error=... أو #access_token=...) =====
+      const hash = window.location.hash.substring(1)
+      const hashParams = new URLSearchParams(hash)
 
-      // لو فيه error في الـ URL
-      if (errorParam) {
+      // ===== قراءة query params (?code=... أو ?error=...) =====
+      const queryParams = new URLSearchParams(window.location.search)
+
+      const errorCode = hashParams.get('error_code') || queryParams.get('error')
+      const errorDesc = hashParams.get('error_description') || queryParams.get('error_description')
+      const type = hashParams.get('type') || queryParams.get('type')
+      const code = queryParams.get('code')
+
+      console.log('[Callback] hash params:', Object.fromEntries(hashParams))
+      console.log('[Callback] query params:', Object.fromEntries(queryParams))
+
+      // ===== لو فيه error =====
+      if (errorCode) {
+        console.error('[Callback] error:', errorCode, errorDesc)
+        let msg = 'الرابط ده منتهي الصلاحية أو اتستخدم قبل كده'
+        if (errorCode === 'otp_expired') {
+          msg = 'انتهت صلاحية الرابط — اطلب رابط تأكيد جديد'
+        } else if (errorCode === 'access_denied') {
+          msg = 'تم رفض الوصول — اطلب رابط جديد'
+        }
+        setErrorDetail(errorDesc || errorCode)
         setStatus('error')
-        setMessage(errorDesc || 'حصل خطأ في التحقق')
+        setMessage(msg)
         return
       }
 
-      // exchange code for session (PKCE flow)
+      // ===== PKCE flow: ?code= في الـ query =====
       if (code) {
+        console.log('[Callback] PKCE flow — exchanging code...')
         const { data, error } = await supabase.auth.exchangeCodeForSession(code)
         if (error) {
+          console.error('[Callback] exchangeCodeForSession error:', error)
           setStatus('error')
-          setMessage('الرابط ده اتستخدم قبل كده أو منتهي الصلاحية')
+          setMessage('فشل استبدال الكود — اطلب رابط جديد')
           return
         }
 
-        const session = data.session
-        if (!session) {
-          setStatus('error')
-          setMessage('فشل استرداد الجلسة')
-          return
-        }
-
-        // لو recovery (استعادة باسورد)
         if (type === 'recovery') {
-          setIsRecovery(true)
           setShowPasswordForm(true)
           setStatus('success')
           setMessage('اكتب الباسورد الجديد')
           return
         }
 
-        // تأكيد إيميل عادي → مزامنة مع الباكند
-        await syncAndRedirect(session.access_token)
+        await syncAndRedirect(data.session!.access_token)
         return
       }
 
-      // fallback: تحقق من session موجودة
+      // ===== Implicit flow: #access_token= في الـ hash =====
+      const accessToken = hashParams.get('access_token')
+      const refreshToken = hashParams.get('refresh_token')
+
+      if (accessToken) {
+        console.log('[Callback] Implicit flow — setting session from hash...')
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken || '',
+        })
+        if (error) {
+          console.error('[Callback] setSession error:', error)
+          setStatus('error')
+          setMessage('فشل تفعيل الجلسة — اطلب رابط جديد')
+          return
+        }
+
+        if (type === 'recovery') {
+          setShowPasswordForm(true)
+          setStatus('success')
+          setMessage('اكتب الباسورد الجديد')
+          return
+        }
+
+        await syncAndRedirect(data.session!.access_token)
+        return
+      }
+
+      // ===== Fallback: انتظر auth state change =====
+      console.log('[Callback] No code or token — waiting for auth state...')
+      setMessage('جاري انتظار التأكيد...')
+
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
         if (type === 'recovery') {
-          setIsRecovery(true)
           setShowPasswordForm(true)
           setStatus('success')
           setMessage('اكتب الباسورد الجديد')
@@ -83,10 +122,10 @@ export default function AuthCallback() {
         await syncAndRedirect(session.access_token)
       } else {
         setStatus('error')
-        setMessage('الرابط منتهي الصلاحية — سجل دخول من جديد')
+        setMessage('لم يتم العثور على جلسة — اطلب رابط تأكيد جديد')
       }
     } catch (err) {
-      console.error('Auth callback error:', err)
+      console.error('[Callback] unexpected error:', err)
       setStatus('error')
       setMessage('حصل خطأ غير متوقع')
     }
@@ -102,6 +141,7 @@ export default function AuthCallback() {
       const data = await res.json()
 
       if (!res.ok) {
+        console.error('[Callback] sync error:', data)
         setStatus('error')
         setMessage(data.error || 'فشل إعداد الحساب')
         return
@@ -134,7 +174,8 @@ export default function AuthCallback() {
           : appUser.role === 'admin' ? '/admin-secret' : '/'
         navigate(dest, { replace: true })
       }, 1500)
-    } catch {
+    } catch (e) {
+      console.error('[Callback] sync fetch error:', e)
       setStatus('error')
       setMessage('مشكلة في الاتصال — جرب تاني')
     }
@@ -146,15 +187,9 @@ export default function AuthCallback() {
       toast.error('الباسورد لازم 8 حروف على الأقل')
       return
     }
-
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword })
-      if (error) {
-        toast.error(error.message || 'فشل تغيير الباسورد')
-        return
-      }
-
-      // بعد تغيير الباسورد → مزامنة وتوجيه
+      if (error) { toast.error(error.message || 'فشل تغيير الباسورد'); return }
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
         await syncAndRedirect(session.access_token)
@@ -168,28 +203,29 @@ export default function AuthCallback() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center px-4 bg-gray-50" dir="rtl">
       <div className="w-full max-w-sm space-y-6 text-center">
 
-        {/* الأيقونة */}
         <div className={`w-24 h-24 rounded-3xl flex items-center justify-center mx-auto shadow-xl
-          ${status === 'loading' ? 'bg-orange-100' : status === 'success' ? 'bg-green-100' : 'bg-red-100'}`}
-        >
+          ${status === 'loading' ? 'bg-orange-100' : status === 'success' ? 'bg-green-100' : 'bg-red-100'}`}>
           {status === 'loading' && <Loader2 className="text-orange-500 animate-spin" size={48} />}
-          {status === 'success' && !showPasswordForm && <CheckCircle className="text-green-500" size={48} />}
-          {status === 'success' && showPasswordForm && <CheckCircle className="text-green-500" size={48} />}
+          {status === 'success' && <CheckCircle className="text-green-500" size={48} />}
           {status === 'error' && <XCircle className="text-red-500" size={48} />}
         </div>
 
-        {/* الرسالة */}
         <div>
           <h1 className="text-2xl font-black text-gray-900">
-            {status === 'loading' ? 'لحظة...' : status === 'success' && showPasswordForm ? 'باسورد جديد' : status === 'success' ? '🎉 تم التأكيد!' : 'حصل مشكلة'}
+            {status === 'loading' ? 'لحظة...'
+              : status === 'success' && showPasswordForm ? 'باسورد جديد'
+              : status === 'success' ? '🎉 تم التأكيد!'
+              : 'حصل مشكلة'}
           </h1>
           <p className="text-gray-500 mt-2 text-sm">{message}</p>
+          {errorDetail && (
+            <p className="text-red-400 text-xs mt-1 font-mono">{errorDetail}</p>
+          )}
         </div>
 
-        {/* فورم الباسورد الجديد (recovery) */}
         {showPasswordForm && (
           <form onSubmit={handlePasswordUpdate} className="space-y-4 text-right">
             <div>
@@ -205,23 +241,25 @@ export default function AuthCallback() {
                 autoComplete="new-password"
               />
             </div>
-            <button
-              type="submit"
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-200 transition-all active:scale-95"
-            >
+            <button type="submit"
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-200 transition-all active:scale-95">
               حفظ الباسورد الجديد ✅
             </button>
           </form>
         )}
 
-        {/* زر الرجوع في حالة الخطأ */}
         {status === 'error' && (
-          <button
-            onClick={() => navigate('/login', { replace: true })}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-200 transition-all active:scale-95"
-          >
-            رجوع لتسجيل الدخول
-          </button>
+          <div className="space-y-3">
+            <button
+              onClick={() => navigate('/login', { replace: true })}
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-200 transition-all active:scale-95"
+            >
+              رجوع لتسجيل الدخول
+            </button>
+            <p className="text-gray-400 text-xs">
+              سجّل من جديد بنفس الإيميل عشان يبعتلك رابط جديد
+            </p>
+          </div>
         )}
       </div>
     </div>

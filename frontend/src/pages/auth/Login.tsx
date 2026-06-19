@@ -288,6 +288,31 @@ export default function LoginPage() {
 
   // ===== شاشة تأكيد الإيميل المُرسل =====
   if (mode === 'email-sent') {
+    async function resendConfirmation() {
+      if (!sentEmail) return
+      if (!checkRateLimit(`resend:${sentEmail}`, 2, 120_000)) {
+        toast.error('انتظر دقيقتين قبل إعادة الإرسال')
+        return
+      }
+      setLoading(true)
+      try {
+        const { error } = await supabase.auth.resend({
+          type: 'signup',
+          email: sentEmail,
+          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        })
+        if (error) {
+          toast.error(error.message || 'فشل إعادة الإرسال')
+        } else {
+          toast.success('📧 تم إرسال رابط جديد — راجع إيميلك')
+        }
+      } catch {
+        toast.error('مشكلة في الاتصال')
+      } finally {
+        setLoading(false)
+      }
+    }
+
     return (
       <div className="min-h-[85vh] flex items-center justify-center px-4">
         <div className="w-full max-w-sm space-y-6 text-center">
@@ -309,8 +334,16 @@ export default function LoginPage() {
             <ul className="text-orange-600 text-xs space-y-1 list-disc list-inside">
               <li>شوف مجلد الـ Spam أو Junk</li>
               <li>تأكد إن الإيميل مكتوب صح</li>
+              <li>الرابط صالح لمدة ساعة فقط</li>
             </ul>
           </div>
+          <button
+            onClick={resendConfirmation}
+            disabled={loading}
+            className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-3.5 rounded-2xl shadow-lg shadow-orange-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+          >
+            {loading ? <><Loader2 size={18} className="animate-spin" /> جاري الإرسال...</> : '📧 إعادة إرسال رابط التأكيد'}
+          </button>
           <button
             onClick={() => { setMode('welcome'); setEmail(''); setPassword(''); setConfirmPass('') }}
             className="w-full flex items-center justify-center gap-1 text-gray-500 text-sm hover:text-gray-700 transition-colors"
