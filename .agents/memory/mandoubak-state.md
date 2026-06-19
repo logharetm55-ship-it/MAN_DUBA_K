@@ -10,8 +10,9 @@ description: Complete delivery platform — custom JWT auth, real data, Arabic R
 - CSS utility classes: `.card`, `.btn-primary`, `.btn-secondary`, `.input`, `.input-field`
 
 ## Running Locally
-- tsx must be installed globally: `npm install -g tsx` (backend devDep install fails but global works)
-- backend/start.sh uses `tsx` (global) not `npx tsx` to avoid interactive prompt
+- backend/start.sh uses `../node_modules/.bin/tsx` (root-level tsx) NOT `npx tsx` (npx prompts for install confirmation and blocks startup)
+- frontend: run `npm install` inside `frontend/` if vite is missing (vite is a devDep)
+- admin_pricing table MUST have data — seed Cairo/Giza/default rows or order creation fails with "منطقة التوصيل مش متاحة"
 
 ## Auth System (NO CLERK)
 - POST /api/auth/register — phone + password + role (CLIENT/COURIER) + address

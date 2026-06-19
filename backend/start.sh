@@ -9,4 +9,4 @@ export JWT_SECRET="${JWT_SECRET:-mand0ubak_jwt_secret_123456789}"
 export NODE_ENV="${NODE_ENV:-development}"
 export PORT="${PORT:-8787}"
 
-cd backend && npx tsx src/server.ts
+cd backend && ../node_modules/.bin/tsx src/server.ts

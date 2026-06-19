@@ -56,6 +56,9 @@ app.use('*', cors({
       !origin ||
       allowedOrigins.includes(origin) ||
       /^https:\/\/[a-z0-9-]+\.replit\.app$/.test(origin) ||
+      /^https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.replit\.app$/.test(origin) ||
+      /^https:\/\/[a-z0-9-]+\.replit\.dev$/.test(origin) ||
+      /^https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.replit\.dev$/.test(origin) ||
       /^https:\/\/[a-z0-9-]+-\d+\.repl\.co$/.test(origin) ||
       (c.env.NODE_ENV === 'development' && origin.startsWith('http://localhost'))
     ) {

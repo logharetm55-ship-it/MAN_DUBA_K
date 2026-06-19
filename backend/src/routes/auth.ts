@@ -152,18 +152,6 @@ authRouter.post('/register', zValidator('json', registerSchema), async (c) => {
     })()
   }
 
-  // إرسال إيميل ترحيب لو عنده إيميل (async)
-  ;(async () => {
-    const resendKey = (c.env as Record<string, unknown>).RESEND_API_KEY as string | undefined
-    if (resendKey && email) {
-      await sendEmail(resendKey, {
-        to: email,
-        subject: 'أهلاً بك في مندوبك! 🛵',
-        html: welcomeEmailHtml(newUser.name, role),
-      })
-    }
-  })()
-
   // توكن JWT
   const token = await signJWT({
     userId: newUser.id,
