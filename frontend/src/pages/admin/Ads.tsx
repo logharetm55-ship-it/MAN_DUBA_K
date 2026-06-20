@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import toast from 'react-hot-toast'
-import { Megaphone, Plus, Eye, EyeOff, TrendingUp, Loader2, RefreshCw, Trash2, ImagePlus, X } from 'lucide-react'
+import {
+  Megaphone, Plus, Eye, EyeOff, TrendingUp, Loader2, RefreshCw,
+  Trash2, ImagePlus, X, ChevronDown, ChevronUp, ShoppingBag,
+  Clock, User, CheckCircle, XCircle, Package
+} from 'lucide-react'
 import { useAuth } from '../../lib/auth-context'
 
 interface AdOffer {
@@ -15,6 +19,24 @@ interface AdOffer {
   click_count: number
   start_date: string
   end_date: string
+}
+
+interface AdOrder {
+  id: string
+  order_number: string
+  status: string
+  delivery_fee: number
+  created_at: string
+  order_items: { name: string; quantity: number; price?: number; shop_name: string }[]
+  users: { name: string; phone: string } | null
+}
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  PENDING:    { label: 'انتظار مندوب', color: 'bg-yellow-100 text-yellow-700' },
+  ACCEPTED:   { label: 'تم القبول',    color: 'bg-blue-100 text-blue-700' },
+  PICKED_UP:  { label: 'في الطريق',   color: 'bg-purple-100 text-purple-700' },
+  DELIVERED:  { label: 'تم التسليم',  color: 'bg-green-100 text-green-700' },
+  CANCELLED:  { label: 'ملغي',        color: 'bg-red-100 text-red-700' },
 }
 
 const today = new Date().toISOString().split('T')[0]
@@ -45,6 +67,11 @@ export default function AdminAds() {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
+  // per-ad orders state
+  const [expandedAdId, setExpandedAdId] = useState<string | null>(null)
+  const [adOrders, setAdOrders] = useState<Record<string, AdOrder[]>>({})
+  const [loadingOrders, setLoadingOrders] = useState<Record<string, boolean>>({})
+
   const loadAds = useCallback(async () => {
     if (!token) return
     setLoading(true)
@@ -68,7 +95,35 @@ export default function AdminAds() {
 
   useEffect(() => { loadAds() }, [loadAds])
 
-  // رفع صورة الإعلان من الجهاز
+  async function loadAdOrders(adId: string) {
+    if (adOrders[adId] !== undefined || loadingOrders[adId]) return
+    setLoadingOrders(prev => ({ ...prev, [adId]: true }))
+    try {
+      const res = await fetch(`/api/admin/ads/${adId}/orders`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setAdOrders(prev => ({ ...prev, [adId]: data.orders || [] }))
+      } else {
+        setAdOrders(prev => ({ ...prev, [adId]: [] }))
+      }
+    } catch {
+      setAdOrders(prev => ({ ...prev, [adId]: [] }))
+    } finally {
+      setLoadingOrders(prev => ({ ...prev, [adId]: false }))
+    }
+  }
+
+  function toggleAdOrders(adId: string) {
+    if (expandedAdId === adId) {
+      setExpandedAdId(null)
+    } else {
+      setExpandedAdId(adId)
+      loadAdOrders(adId)
+    }
+  }
+
   async function handleImageUpload(file: File) {
     if (!file) return
     if (file.size > 5 * 1024 * 1024) { toast.error('الصورة أكبر من 5MB'); return }
@@ -77,7 +132,6 @@ export default function AdminAds() {
       return
     }
 
-    // عرض preview فوري
     const reader = new FileReader()
     reader.onload = e => setImagePreview(e.target?.result as string)
     reader.readAsDataURL(file)
@@ -160,11 +214,9 @@ export default function AdminAds() {
         setForm(EMPTY_AD)
         setImagePreview(null)
       } else {
-        // إظهار رسالة الخطأ الحقيقية
         const errMsg = data.error || `خطأ ${res.status}`
         const details = data.details ? JSON.stringify(data.details.fieldErrors) : ''
         toast.error(errMsg + (details ? ` — ${details}` : ''), { duration: 5000 })
-        console.error('Create ad error:', res.status, data)
       }
     } catch (err) {
       toast.error('مشكلة في الاتصال')
@@ -179,10 +231,7 @@ export default function AdminAds() {
     try {
       const res = await fetch(`/api/admin/ads/${id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ isActive: !isActive }),
       })
       if (res.ok) {
@@ -217,6 +266,10 @@ export default function AdminAds() {
     }
   }
 
+  // حساب إجمالي إحصائيات الإعلانات
+  const totalClicks = ads.reduce((s, a) => s + (a.click_count || 0), 0)
+  const activeAds = ads.filter(a => a.is_active).length
+
   return (
     <div className="max-w-2xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
@@ -240,6 +293,24 @@ export default function AdminAds() {
           </button>
         </div>
       </div>
+
+      {/* Summary Stats */}
+      {ads.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="card py-3 text-center">
+            <div className="text-2xl font-black text-gray-900">{ads.length}</div>
+            <div className="text-xs text-gray-500">إجمالي الإعلانات</div>
+          </div>
+          <div className="card py-3 text-center">
+            <div className="text-2xl font-black text-green-600">{activeAds}</div>
+            <div className="text-xs text-gray-500">إعلانات مفعّلة</div>
+          </div>
+          <div className="card py-3 text-center">
+            <div className="text-2xl font-black text-orange-600">{totalClicks}</div>
+            <div className="text-xs text-gray-500">إجمالي الضغطات</div>
+          </div>
+        </div>
+      )}
 
       {/* Create Form */}
       {showForm && (
@@ -375,13 +446,13 @@ export default function AdminAds() {
               <img
                 src={ad.image_url || 'https://placehold.co/120x120/f97316/fff?text=Ad'}
                 alt={ad.title}
-                className="w-28 h-28 object-cover flex-shrink-0"
+                className="w-28 h-auto object-cover flex-shrink-0"
                 onError={e => { (e.target as HTMLImageElement).src = 'https://placehold.co/120x120/f97316/fff?text=Ad' }}
               />
-              <div className="p-4 flex-1">
-                <div className="flex items-start justify-between">
+              <div className="p-4 flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
                   <h3 className="font-bold text-sm line-clamp-2 flex-1">{ad.title}</h3>
-                  <div className="flex gap-1 mr-2">
+                  <div className="flex gap-1 flex-shrink-0">
                     <button
                       onClick={() => toggleAd(ad.id, ad.is_active)}
                       className={`p-1.5 rounded-lg transition-all ${ad.is_active ? 'bg-green-100 text-green-600 hover:bg-green-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
@@ -398,20 +469,109 @@ export default function AdminAds() {
                     </button>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">{ad.shop_name}</p>
+                <p className="text-xs text-gray-500 mt-1">{ad.shop_name} • {ad.product_name}</p>
                 {ad.product_price && (
                   <p className="text-orange-500 font-bold text-sm mt-1">{ad.product_price} جنيه</p>
                 )}
-                <div className="flex items-center gap-1 text-xs text-gray-400 mt-2">
-                  <TrendingUp size={12} />
-                  <span>{ad.click_count} ضغطة</span>
-                  <span className="mx-1">•</span>
-                  <span className={ad.is_active ? 'text-green-500' : 'text-gray-400'}>
+
+                {/* Stats Row */}
+                <div className="flex items-center gap-3 mt-2">
+                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                    <TrendingUp size={12} />
+                    <span>{ad.click_count} ضغطة</span>
+                  </div>
+                  <span className={`text-xs font-semibold ${ad.is_active ? 'text-green-500' : 'text-gray-400'}`}>
                     {ad.is_active ? '● مفعّل' : '○ موقوف'}
                   </span>
                 </div>
+
+                {/* Orders Toggle Button */}
+                <button
+                  onClick={() => toggleAdOrders(ad.id)}
+                  className="mt-2 flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 transition-colors"
+                >
+                  <ShoppingBag size={13} />
+                  <span>الطلبات من الإعلان ده</span>
+                  {loadingOrders[ad.id] ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : expandedAdId === ad.id ? (
+                    <ChevronUp size={13} />
+                  ) : (
+                    <ChevronDown size={13} />
+                  )}
+                  {adOrders[ad.id] !== undefined && (
+                    <span className="bg-orange-500 text-white rounded-full px-1.5 py-0.5 text-xs font-black">
+                      {adOrders[ad.id].length}
+                    </span>
+                  )}
+                </button>
               </div>
             </div>
+
+            {/* Orders Expanded Section */}
+            {expandedAdId === ad.id && (
+              <div className="border-t border-gray-100 bg-gray-50 p-4">
+                {loadingOrders[ad.id] ? (
+                  <div className="flex items-center gap-2 text-gray-500 text-sm py-2">
+                    <Loader2 size={16} className="animate-spin" />
+                    جاري جلب الطلبات...
+                  </div>
+                ) : !adOrders[ad.id] || adOrders[ad.id].length === 0 ? (
+                  <div className="text-center py-4 text-gray-400 text-sm">
+                    <Package size={32} className="mx-auto mb-2 opacity-40" />
+                    مفيش طلبات من الإعلان ده لحد دلوقتي
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs font-bold text-gray-500 mb-3">
+                      {adOrders[ad.id].length} طلب من الإعلان ده
+                    </p>
+                    {adOrders[ad.id].map(order => {
+                      const status = STATUS_LABELS[order.status] || { label: order.status, color: 'bg-gray-100 text-gray-600' }
+                      return (
+                        <div key={order.id} className="bg-white rounded-xl p-3 border border-gray-100">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="font-bold text-sm text-gray-900">#{order.order_number}</div>
+                              {order.users && (
+                                <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
+                                  <User size={11} />
+                                  <span>{order.users.name || 'عميل'}</span>
+                                  {order.users.phone && <span>• {order.users.phone}</span>}
+                                </div>
+                              )}
+                            </div>
+                            <span className={`text-xs font-bold px-2 py-1 rounded-lg flex-shrink-0 ${status.color}`}>
+                              {status.label}
+                            </span>
+                          </div>
+
+                          {/* Items */}
+                          {order.order_items && order.order_items.length > 0 && (
+                            <div className="mt-2 space-y-0.5">
+                              {order.order_items.map((item, i) => (
+                                <div key={i} className="text-xs text-gray-500">
+                                  • {item.name} × {item.quantity}
+                                  {item.price && <span className="text-orange-500 mr-1">({item.price} جنيه/قطعة)</span>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50">
+                            <div className="flex items-center gap-1 text-xs text-gray-400">
+                              <Clock size={11} />
+                              <span>{new Date(order.created_at).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                            <span className="text-xs font-bold text-orange-600">{order.delivery_fee} جنيه توصيل</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))
       )}

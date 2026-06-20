@@ -43,6 +43,7 @@ const createOrderSchema = z.discriminatedUnion('type', [
     pickupLng: z.number().min(-180).max(180),
     notes: z.string().max(1000).optional(),
     clientAddress: z.string().max(500).optional(),
+    adId: z.string().max(100).optional(),
   }),
   // نوع 2: توصيل من مكان لمكان
   z.object({
@@ -96,9 +97,25 @@ ordersRouter.post('/', requireRole('CLIENT', 'ADMIN'), async (c) => {
   let orderItems: { order_id: string; name: string; quantity: number; price?: number; shop_name: string; shop_address?: string }[] = []
 
   if (parsed.data.type === 'SHOPPING') {
-    const { shops, pickupLat, pickupLng, notes, clientAddress } = parsed.data
+    const { shops, pickupLat, pickupLng, notes, clientAddress, adId } = parsed.data
     const numShops = shops.length
     const priceResult = calculateShoppingFee(numShops, pricing)
+
+    // دمج ملاحظات العميل مع tag الإعلان
+    const notesWithAd = [notes, adId ? `[ad:${adId}]` : ''].filter(Boolean).join(' ') || null
+
+    // زيادة عداد الضغطات على الإعلان عند تأكيد الأوردر
+    if (adId) {
+      const supabaseForAd = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+      supabaseForAd.from('ad_offers').select('click_count').eq('id', adId).single().then(({ data: adData }) => {
+        if (adData) {
+          supabaseForAd.from('ad_offers').update({
+            click_count: (adData.click_count || 0) + 1,
+            updated_at: new Date().toISOString(),
+          }).eq('id', adId).then(() => {})
+        }
+      })
+    }
 
     orderData = {
       id: orderId,
@@ -114,7 +131,7 @@ ordersRouter.post('/', requireRole('CLIENT', 'ADMIN'), async (c) => {
       delivery_details: clientAddress || '',
       distance_km: 0,
       delivery_fee: priceResult.finalFee,
-      notes: notes || null,
+      notes: notesWithAd,
       num_shops: numShops,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),

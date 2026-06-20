@@ -1,14 +1,15 @@
 // =============================================================
 // Order Page - نوعان: مشتريات (4 محلات) وتوصيل (من مكان لمكان)
+// + Ad Quick Order Mode: طلب سريع من إعلان
 // =============================================================
 
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {
   MapPin, Package, ShoppingBag, Truck, Plus, Minus,
   Calculator, CheckCircle, ArrowLeft, Phone, Trash2,
-  ChevronDown, ChevronUp, Store
+  ChevronDown, ChevronUp, Store, Tag, Star
 } from 'lucide-react'
 import { useAuth } from '../lib/auth-context'
 
@@ -29,11 +30,29 @@ interface PriceEstimate {
   distanceKm?: number
 }
 
+interface AdOffer {
+  id: string
+  title: string
+  description?: string
+  image_url: string
+  shop_name: string
+  shop_address: string
+  shop_lat: number
+  shop_lng: number
+  product_name: string
+  product_price?: number
+}
+
 const API = '/api'
 
 export default function OrderPage() {
   const { user, token } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // استلام بيانات الإعلان من الصفحة الرئيسية
+  const adOffer = (location.state as { adOffer?: AdOffer } | null)?.adOffer ?? null
+
   const [step, setStep] = useState<Step>('type')
   const [orderType, setOrderType] = useState<OrderType>('SHOPPING')
   const [submitting, setSubmitting] = useState(false)
@@ -57,6 +76,20 @@ export default function OrderPage() {
   const [priceEst, setPriceEst] = useState<PriceEstimate | null>(null)
   const [loadingPrice, setLoadingPrice] = useState(false)
 
+  // Ad Quick Order state
+  const [adQuantity, setAdQuantity] = useState(1)
+  const [adClientAddress, setAdClientAddress] = useState(user?.address || '')
+  const [adNotes, setAdNotes] = useState('')
+  const [adPriceEst, setAdPriceEst] = useState<PriceEstimate | null>(null)
+  const [adLoadingPrice, setAdLoadingPrice] = useState(false)
+  const [adStep, setAdStep] = useState<'confirm' | 'success'>('confirm')
+
+  useEffect(() => {
+    if (adOffer) {
+      estimateAdPrice()
+    }
+  }, [adOffer])
+
   if (!user) {
     return (
       <div className="max-w-md mx-auto text-center py-16">
@@ -64,6 +97,243 @@ export default function OrderPage() {
         <h2 className="text-xl font-bold mb-2">سجّل دخول الأول</h2>
         <button onClick={() => navigate('/login')} className="btn-primary mt-4">
           دخول / تسجيل
+        </button>
+      </div>
+    )
+  }
+
+  // =====================
+  // Ad Quick Order Logic
+  // =====================
+  async function estimateAdPrice() {
+    if (!adOffer) return
+    setAdLoadingPrice(true)
+    try {
+      const res = await fetch(`${API}/pricing/calculate?pickupLat=${adOffer.shop_lat}&pickupLng=${adOffer.shop_lng}&deliveryLat=${adOffer.shop_lat}&deliveryLng=${adOffer.shop_lng}&numShops=1&type=SHOPPING`)
+      if (res.ok) {
+        const data = await res.json()
+        const est = data.estimate
+        setAdPriceEst({
+          fee: est.deliveryFee || est.finalFee || 15,
+          breakdown: est.breakdown || `توصيل من ${adOffer.shop_name}`,
+          type: 'shopping',
+          numShops: 1,
+        })
+      } else {
+        setAdPriceEst({ fee: 15, breakdown: 'تقدير مبدئي', type: 'shopping', numShops: 1 })
+      }
+    } catch {
+      setAdPriceEst({ fee: 15, breakdown: 'تقدير مبدئي', type: 'shopping', numShops: 1 })
+    } finally {
+      setAdLoadingPrice(false)
+    }
+  }
+
+  async function submitAdOrder() {
+    if (!adOffer) return
+    if (!adClientAddress.trim()) {
+      toast.error('اكتب عنوانك عشان نوصّللك')
+      return
+    }
+    if (!token) { toast.error('سجّل دخول الأول'); navigate('/login'); return }
+
+    setSubmitting(true)
+    try {
+      const body = {
+        type: 'SHOPPING',
+        shops: [{
+          shopName: adOffer.shop_name,
+          shopAddress: adOffer.shop_address,
+          items: [{
+            name: adOffer.product_name,
+            quantity: adQuantity,
+            price: adOffer.product_price,
+          }],
+        }],
+        pickupLat: adOffer.shop_lat,
+        pickupLng: adOffer.shop_lng,
+        clientAddress: adClientAddress.trim(),
+        adId: adOffer.id,
+        notes: adNotes || undefined,
+      }
+
+      const res = await fetch(`${API}/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        toast.error(data.error || 'فشل تسجيل الطلب')
+        return
+      }
+
+      setCreatedOrder({
+        orderNumber: data.order.order_number,
+        deliveryFee: data.order.delivery_fee,
+      })
+      setAdStep('success')
+      toast.success('🎉 تم تسجيل طلبك بنجاح!')
+    } catch {
+      toast.error('مشكلة في الاتصال، جرب تاني')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // =====================
+  // Ad Quick Order UI
+  // =====================
+  if (adOffer) {
+    if (adStep === 'success' && createdOrder) {
+      return (
+        <div className="max-w-md mx-auto text-center py-12">
+          <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <CheckCircle className="text-green-500" size={48} />
+          </div>
+          <h1 className="text-2xl font-black mb-2">تم تسجيل طلبك! 🎉</h1>
+          <p className="text-gray-500 mb-2">رقم الطلب: <span className="font-bold text-gray-900">{createdOrder.orderNumber}</span></p>
+          <p className="text-gray-500 mb-8">سعر التوصيل: <span className="font-bold text-orange-600">{createdOrder.deliveryFee} جنيه</span></p>
+          <div className="card mb-6 text-right space-y-2 text-sm text-gray-600">
+            <p>✅ طلبك ظهر لكل المناديب المتاحين</p>
+            <p>⚡ أول مندوب يقبل هياخد طلبك فوراً</p>
+            <p>📱 هتجيلك إشعار لما المندوب يقبل</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => navigate('/my-orders')} className="flex-1 btn-secondary">طلباتي</button>
+            <button onClick={() => navigate('/')} className="flex-1 btn-primary">الرئيسية</button>
+          </div>
+        </div>
+      )
+    }
+
+    const totalProductPrice = (adOffer.product_price || 0) * adQuantity
+
+    return (
+      <div className="max-w-md mx-auto space-y-5">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-xl">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-xl font-black">اطلب دلوقتي</h1>
+        </div>
+
+        {/* Ad Card */}
+        <div className="card overflow-hidden p-0">
+          <img
+            src={adOffer.image_url}
+            alt={adOffer.title}
+            className="w-full h-48 object-cover"
+            onError={e => { (e.target as HTMLImageElement).src = 'https://placehold.co/400x200/f97316/fff?text=عرض' }}
+          />
+          <div className="p-4">
+            <div className="flex items-start justify-between gap-2">
+              <h2 className="font-bold text-gray-900 text-lg leading-tight">{adOffer.title}</h2>
+              {adOffer.product_price && (
+                <span className="bg-orange-500 text-white font-black px-3 py-1 rounded-xl text-sm whitespace-nowrap">
+                  {adOffer.product_price} جنيه
+                </span>
+              )}
+            </div>
+            {adOffer.description && (
+              <p className="text-gray-500 text-sm mt-1">{adOffer.description}</p>
+            )}
+            <div className="flex items-center gap-1 text-gray-500 text-sm mt-2">
+              <MapPin size={14} />
+              <span>{adOffer.shop_name} — {adOffer.shop_address}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Quantity Selector */}
+        <div className="card">
+          <h3 className="font-bold mb-3 flex items-center gap-2">
+            <ShoppingBag size={18} className="text-orange-500" />
+            {adOffer.product_name}
+          </h3>
+          <div className="flex items-center justify-between">
+            <span className="text-gray-600 text-sm">الكمية</span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setAdQuantity(q => Math.max(1, q - 1))}
+                className="w-9 h-9 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center hover:bg-orange-200 transition-colors font-bold"
+              >
+                <Minus size={16} />
+              </button>
+              <span className="text-2xl font-black w-8 text-center">{adQuantity}</span>
+              <button
+                onClick={() => setAdQuantity(q => Math.min(20, q + 1))}
+                className="w-9 h-9 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center hover:bg-orange-200 transition-colors font-bold"
+              >
+                <Plus size={16} />
+              </button>
+            </div>
+          </div>
+          {adOffer.product_price && (
+            <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-sm">
+              <span className="text-gray-500">إجمالي المنتجات</span>
+              <span className="font-bold">{totalProductPrice} جنيه</span>
+            </div>
+          )}
+        </div>
+
+        {/* Client Address */}
+        <div className="card space-y-3">
+          <h3 className="font-bold flex items-center gap-2">
+            <MapPin size={18} className="text-green-500" />
+            عنوانك (مكان التسليم)
+          </h3>
+          <input
+            className="input"
+            placeholder="اكتب عنوانك الكامل..."
+            value={adClientAddress}
+            onChange={e => setAdClientAddress(e.target.value)}
+            dir="rtl"
+          />
+          <textarea
+            className="input resize-none h-16"
+            placeholder="ملاحظات للمندوب... (اختياري)"
+            value={adNotes}
+            onChange={e => setAdNotes(e.target.value)}
+          />
+        </div>
+
+        {/* Price Estimate */}
+        <div className="bg-orange-50 border-2 border-orange-200 rounded-2xl p-4">
+          <h3 className="font-bold text-orange-700 mb-2 flex items-center gap-2">
+            <Calculator size={18} /> سعر التوصيل
+          </h3>
+          {adLoadingPrice ? (
+            <div className="flex items-center gap-2 text-orange-600 text-sm">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-orange-500 border-t-transparent" />
+              جاري الحساب...
+            </div>
+          ) : adPriceEst ? (
+            <div>
+              <div className="text-3xl font-black text-orange-600">{adPriceEst.fee} جنيه</div>
+              <div className="text-xs text-orange-600 mt-1">{adPriceEst.breakdown}</div>
+              {adOffer.product_price && (
+                <div className="text-xs text-gray-500 mt-2">
+                  💡 تمن المنتجات ({totalProductPrice} جنيه) بتتسلم للمندوب مباشرة
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Confirm Button */}
+        <button
+          disabled={submitting || !adClientAddress.trim()}
+          onClick={submitAdOrder}
+          className="btn-primary w-full flex items-center justify-center gap-2 text-lg py-4 disabled:opacity-50"
+        >
+          {submitting ? (
+            <><div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />جاري التسجيل...</>
+          ) : (
+            <><CheckCircle size={22} />تأكيد الطلب</>
+          )}
         </button>
       </div>
     )
@@ -106,7 +376,6 @@ export default function OrderPage() {
       if (orderType === 'SHOPPING') {
         const validShops = shops.filter(s => s.shopName.trim() && s.items.some(it => it.name.trim()))
         const numShops = validShops.length || 1
-        // Call pricing API with Cairo center coords
         const res = await fetch(`${API}/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228&numShops=${numShops}&type=SHOPPING`)
         if (res.ok) {
           const data = await res.json()
@@ -118,7 +387,6 @@ export default function OrderPage() {
             numShops,
           })
         } else {
-          // Fallback: base 15 + (shops-1)*5
           const fee = 15 + (numShops - 1) * 5
           setPriceEst({
             fee,
@@ -128,7 +396,6 @@ export default function OrderPage() {
           })
         }
       } else {
-        // DELIVERY - use Cairo coords as estimate
         const res = await fetch(`${API}/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228`)
         if (res.ok) {
           const data = await res.json()
@@ -520,10 +787,11 @@ export default function OrderPage() {
 
           <button disabled={submitting || loadingPrice} onClick={submitOrder}
             className="btn-primary w-full flex items-center justify-center gap-2 text-lg">
-            {submitting
-              ? <><div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />جاري التسجيل...</>
-              : <><Package size={22} />تأكيد الطلب</>
-            }
+            {submitting ? (
+              <><div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />جاري التسجيل...</>
+            ) : (
+              <><CheckCircle size={22} />أكّد الطلب</>
+            )}
           </button>
         </div>
       )}
@@ -532,9 +800,9 @@ export default function OrderPage() {
 }
 
 // =====================
-// Shop Card Component
+// ShopCard Component
 // =====================
-function ShopCard({ shop, shopIndex, total, onUpdate, onRemove, onAddItem, onRemoveItem, onUpdateItem }: {
+interface ShopCardProps {
   shop: ShopGroup
   shopIndex: number
   total: number
@@ -543,57 +811,63 @@ function ShopCard({ shop, shopIndex, total, onUpdate, onRemove, onAddItem, onRem
   onAddItem: () => void
   onRemoveItem: (ii: number) => void
   onUpdateItem: (ii: number, field: 'name' | 'quantity' | 'price', val: string | number) => void
-}) {
-  const [expanded, setExpanded] = useState(true)
+}
+
+function ShopCard({ shop, shopIndex, total, onUpdate, onRemove, onAddItem, onRemoveItem, onUpdateItem }: ShopCardProps) {
+  const [collapsed, setCollapsed] = useState(false)
 
   return (
-    <div className="card border-2 border-orange-100">
-      <div className="flex items-center justify-between">
+    <div className="card border-2 border-gray-100">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-orange-500 rounded-lg flex items-center justify-center text-white text-sm font-bold">
-            {shopIndex + 1}
+          <div className="w-8 h-8 bg-orange-100 rounded-xl flex items-center justify-center">
+            <Store size={16} className="text-orange-600" />
           </div>
-          <Store size={16} className="text-orange-500" />
           <span className="font-bold text-sm">محل {shopIndex + 1}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setExpanded(!expanded)} className="text-gray-400 hover:text-gray-600">
-            {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+        <div className="flex gap-1">
+          <button onClick={() => setCollapsed(!collapsed)}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+            {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
           </button>
           {total > 1 && (
-            <button onClick={onRemove} className="text-red-400 hover:text-red-600">
+            <button onClick={onRemove}
+              className="p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors">
               <Trash2 size={16} />
             </button>
           )}
         </div>
       </div>
 
-      {expanded && (
-        <div className="mt-3 space-y-3">
-          <input className="input" placeholder="اسم المحل *" value={shop.shopName}
-            onChange={e => onUpdate('shopName', e.target.value)} dir="rtl" />
-          <input className="input" placeholder="عنوان المحل (اختياري)" value={shop.shopAddress}
-            onChange={e => onUpdate('shopAddress', e.target.value)} dir="rtl" />
+      {!collapsed && (
+        <>
+          <div className="space-y-2 mb-3">
+            <input className="input text-sm" placeholder="اسم المحل *"
+              value={shop.shopName} onChange={e => onUpdate('shopName', e.target.value)} dir="rtl" />
+            <input className="input text-sm" placeholder="عنوان المحل (اختياري)"
+              value={shop.shopAddress} onChange={e => onUpdate('shopAddress', e.target.value)} dir="rtl" />
+          </div>
 
           <div className="space-y-2">
             {shop.items.map((item, ii) => (
-              <div key={ii} className="flex items-center gap-2">
-                <input className="input flex-1" placeholder={`حاجة ${ii + 1} *`} value={item.name}
-                  onChange={e => onUpdateItem(ii, 'name', e.target.value)} dir="rtl" />
+              <div key={ii} className="flex gap-2 items-start">
+                <input className="input text-sm flex-1" placeholder="اسم المنتج *"
+                  value={item.name} onChange={e => onUpdateItem(ii, 'name', e.target.value)} dir="rtl" />
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button onClick={() => onUpdateItem(ii, 'quantity', Math.max(1, item.quantity - 1))}
-                    className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200">
-                    <Minus size={13} />
+                    className="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 font-bold">
+                    <Minus size={12} />
                   </button>
                   <span className="w-6 text-center text-sm font-bold">{item.quantity}</span>
-                  <button onClick={() => onUpdateItem(ii, 'quantity', item.quantity + 1)}
-                    className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center hover:bg-orange-200">
-                    <Plus size={13} />
+                  <button onClick={() => onUpdateItem(ii, 'quantity', Math.min(50, item.quantity + 1))}
+                    className="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 font-bold">
+                    <Plus size={12} />
                   </button>
                 </div>
                 {shop.items.length > 1 && (
-                  <button onClick={() => onRemoveItem(ii)} className="text-red-400 hover:text-red-600 flex-shrink-0">
-                    <Minus size={16} />
+                  <button onClick={() => onRemoveItem(ii)}
+                    className="w-7 h-7 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg flex items-center justify-center transition-colors">
+                    <Trash2 size={12} />
                   </button>
                 )}
               </div>
@@ -601,10 +875,10 @@ function ShopCard({ shop, shopIndex, total, onUpdate, onRemove, onAddItem, onRem
           </div>
 
           <button onClick={onAddItem}
-            className="flex items-center gap-1 text-sm text-orange-600 hover:text-orange-700 font-semibold">
-            <Plus size={14} /> إضافة حاجة من نفس المحل
+            className="mt-2 flex items-center gap-1 text-orange-600 text-xs font-bold hover:text-orange-700">
+            <Plus size={12} /> إضافة منتج
           </button>
-        </div>
+        </>
       )}
     </div>
   )

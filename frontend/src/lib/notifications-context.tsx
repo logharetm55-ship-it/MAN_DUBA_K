@@ -33,9 +33,26 @@ const NotificationsContext = createContext<NotificationsContextType>({
   refresh: () => {},
 })
 
+const LS_KEY = 'mandoubak_notifications'
+
+function loadFromStorage(): Notification[] {
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as Array<Notification & { createdAt: string }>
+    return parsed.map(n => ({ ...n, createdAt: new Date(n.createdAt) }))
+  } catch { return [] }
+}
+
+function saveToStorage(items: Notification[]) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(items.slice(0, 100)))
+  } catch { /* silent */ }
+}
+
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { token, isLoggedIn } = useAuth()
-  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [notifications, setNotifications] = useState<Notification[]>(loadFromStorage)
 
   const fetchNotifications = useCallback(async () => {
     if (!token || !isLoggedIn) return
@@ -45,7 +62,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       })
       if (!res.ok) return
       const data = await res.json()
-      const items: Notification[] = (data.notifications || []).map((n: {
+      const apiItems: Notification[] = (data.notifications || []).map((n: {
         id: string; type: string; title: string; message: string;
         icon?: string; is_read: boolean; created_at: string
       }) => ({
@@ -57,19 +74,31 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         read: n.is_read,
         createdAt: new Date(n.created_at),
       }))
-      setNotifications(items)
+      // دمج API مع localStorage — بدون تكرار، الـ API بيغلب
+      const stored = loadFromStorage()
+      const apiIds = new Set(apiItems.map(n => n.id))
+      const localOnly = stored.filter(n => !apiIds.has(n.id))
+      const merged = [...apiItems, ...localOnly].sort(
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+      ).slice(0, 100)
+      setNotifications(merged)
+      saveToStorage(merged)
     } catch { /* silent */ }
   }, [token, isLoggedIn])
 
   useEffect(() => {
-    if (!isLoggedIn) { setNotifications([]); return }
+    if (!isLoggedIn) return
     fetchNotifications()
     const interval = setInterval(fetchNotifications, 30000)
     return () => clearInterval(interval)
   }, [isLoggedIn, fetchNotifications])
 
   async function markRead(id: string) {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+    setNotifications(prev => {
+      const updated = prev.map(n => n.id === id ? { ...n, read: true } : n)
+      saveToStorage(updated)
+      return updated
+    })
     if (!token) return
     try {
       await fetch(`/api/notifications/read/${id}`, {
@@ -80,7 +109,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }
 
   async function markAllRead() {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    setNotifications(prev => {
+      const updated = prev.map(n => ({ ...n, read: true }))
+      saveToStorage(updated)
+      return updated
+    })
     if (!token) return
     try {
       await fetch('/api/notifications/read-all', {
@@ -97,7 +130,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       read: false,
       createdAt: new Date(),
     }
-    setNotifications(prev => [notification, ...prev])
+    setNotifications(prev => {
+      const updated = [notification, ...prev]
+      saveToStorage(updated)
+      return updated
+    })
   }
 
   const unreadCount = notifications.filter(n => !n.read).length

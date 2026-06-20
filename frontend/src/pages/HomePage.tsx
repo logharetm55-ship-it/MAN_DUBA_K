@@ -152,12 +152,6 @@ export default function HomePage() {
     navigate('/order', {
       state: {
         adOffer: ad,
-        prefill: {
-          type: 'SHOPPING',
-          pickupLat: ad.shop_lat,
-          pickupLng: ad.shop_lng,
-          pickupDetails: `${ad.product_name} من ${ad.shop_name}`,
-        }
       }
     })
   }

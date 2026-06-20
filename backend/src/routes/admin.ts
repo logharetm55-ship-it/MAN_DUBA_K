@@ -378,3 +378,26 @@ adminRouter.delete('/ads/:id', async (c) => {
   if (error) return c.json({ error: 'مقدرناش تحذف العرض' }, 500)
   return c.json({ success: true, message: 'تم حذف العرض' })
 })
+
+// =====================
+// GET /admin/ads/:id/orders — الأوردرات الجاية من إعلان معين
+// =====================
+adminRouter.get('/ads/:id/orders', async (c) => {
+  const adId = c.req.param('id')
+  if (!adId || adId.length > 100) return c.json({ error: 'معرّف إعلان غير صحيح' }, 400)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+
+  const { data, error } = await supabase
+    .from('orders')
+    .select(`
+      id, order_number, status, delivery_fee, created_at,
+      order_items(name, quantity, price, shop_name),
+      users!orders_client_id_fkey(name, phone)
+    `)
+    .like('notes', `%[ad:${adId}]%`)
+    .order('created_at', { ascending: false })
+    .limit(100)
+
+  if (error) return c.json({ success: true, orders: [] })
+  return c.json({ success: true, orders: data || [] })
+})
