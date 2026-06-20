@@ -290,10 +290,10 @@ authRouter.post('/send-otp', async (c) => {
   if (!parsed.success) return c.json({ error: 'رقم التليفون غلط (مثال: 01012345678)' }, 400)
 
   const { phone, purpose } = parsed.data
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
 
   // لو التسجيل: نتحقق إن الرقم مش مسجل
   if (purpose === 'register') {
-    const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
     const { data: existing } = await supabase
       .from('users')
       .select('id')
@@ -304,12 +304,30 @@ authRouter.post('/send-otp', async (c) => {
     }
   }
 
+  // لو الدخول: نتحقق إن الرقم مسجل فعلاً
+  if (purpose === 'login') {
+    const { data: existing } = await supabase
+      .from('users')
+      .select('id')
+      .eq('phone', phone)
+      .single()
+    if (!existing) {
+      return c.json({ error: 'الرقم ده مش مسجل — سجّل حساب جديد أول' }, 404)
+    }
+  }
+
   // توليد كود 6 أرقام
   const otp = Math.floor(100000 + Math.random() * 900000).toString()
   const otpKey = `otp:${phone}`
+  const expiresAt = Date.now() + 5 * 60 * 1000
 
-  // حفظ الكود في KV لمدة 5 دقائق
-  await c.env.MANDOUBAK_KV.put(otpKey, otp, { expirationTtl: 300 })
+  // حفظ الكود في KV لمدة 5 دقائق — مع fallback للـ in-memory
+  try {
+    await c.env.MANDOUBAK_KV.put(otpKey, otp, { expirationTtl: 300 })
+  } catch {
+    // KV غير متاح (local dev) → نستخدم الـ in-memory store
+    otpStore.set(otpKey, { code: otp, expiresAt, userId: '' })
+  }
 
   // محاولة إرسال SMS لو Twilio متاح
   const twilioSid = (c.env as Record<string, unknown>).TWILIO_ACCOUNT_SID as string | undefined
@@ -346,8 +364,99 @@ authRouter.post('/send-otp', async (c) => {
     success: true,
     message: smsSent
       ? `✅ تم إرسال كود التحقق على ${phone}`
-      : `📋 تم إنشاء الكود — مش عندنا SMS Provider دلوقتي`,
+      : `📋 تم إنشاء الكود — شوف الـ server logs`,
     smsSent,
+    // في الـ dev mode: نرجّع الكود في الـ response عشان سهل التجربة
+    devOtp: (!smsSent && process.env.NODE_ENV !== 'production') ? otp : undefined,
+  })
+})
+
+// =====================
+// POST /api/auth/verify-phone-login - تحقق من OTP وأصدر JWT (لتسجيل الدخول بالموبايل)
+// =====================
+authRouter.post('/verify-phone-login', async (c) => {
+  let body: unknown
+  try { body = await c.req.json() } catch {
+    return c.json({ error: 'بيانات غير صحيحة' }, 400)
+  }
+
+  const schema = z.object({
+    phone: z.string().regex(/^01[0-9]{9}$/, 'رقم التليفون غلط'),
+    otp: z.string().length(6, 'الكود لازم 6 أرقام'),
+  })
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) return c.json({ error: 'بيانات غير صحيحة' }, 400)
+
+  const { phone, otp } = parsed.data
+  const otpKey = `otp:${phone}`
+
+  // جيب الكود من KV أو من الـ in-memory
+  let storedOtp: string | null = null
+  try {
+    storedOtp = await c.env.MANDOUBAK_KV.get(otpKey)
+  } catch {
+    const entry = otpStore.get(otpKey)
+    if (entry && Date.now() < entry.expiresAt) {
+      storedOtp = entry.code
+    }
+  }
+
+  if (!storedOtp) {
+    return c.json({ error: 'الكود انتهت صلاحيته أو لم يُرسل — اطلب كود جديد' }, 400)
+  }
+  if (storedOtp !== otp) {
+    return c.json({ error: 'الكود غلط، جرب تاني' }, 400)
+  }
+
+  // حذف الكود بعد التحقق الناجح
+  try { await c.env.MANDOUBAK_KV.delete(otpKey) } catch { otpStore.delete(otpKey) }
+
+  // جيب بيانات اليوزر من DB
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+  const { data: userData } = await supabase
+    .from('users')
+    .select('id, phone, name, role, address, onboarded, avatar_url')
+    .eq('phone', phone)
+    .single()
+
+  if (!userData) {
+    return c.json({ error: 'الحساب مش موجود — سجّل حساب جديد' }, 404)
+  }
+
+  // بيانات المندوب لو موجود
+  let courierData = null
+  if (userData.role === 'COURIER') {
+    const { data: courier } = await supabase
+      .from('couriers')
+      .select('id, status, name, is_online')
+      .eq('user_id', userData.id)
+      .single()
+    courierData = courier
+  }
+
+  // حدّث last_seen_at (best-effort)
+  supabase.from('users').update({ last_seen_at: new Date().toISOString() }).eq('id', userData.id).then(() => {}).catch(() => {})
+
+  // أصدر JWT
+  const token = await signJWT({
+    userId: userData.id,
+    phone: userData.phone,
+    role: userData.role,
+  }, c.env.JWT_SECRET || 'mandoubak-jwt-secret-2024')
+
+  return c.json({
+    success: true,
+    token,
+    user: {
+      id: userData.id,
+      phone: userData.phone,
+      name: userData.name,
+      role: userData.role,
+      address: userData.address || null,
+      onboarded: userData.onboarded,
+      courierStatus: (courierData as Record<string, unknown> | null)?.status || null,
+      courierId: (courierData as Record<string, unknown> | null)?.id || null,
+    },
   })
 })
 

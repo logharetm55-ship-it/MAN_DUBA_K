@@ -1,0 +1,145 @@
+'use client'
+
+import { useState } from 'react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import type { Database } from '@/lib/database.types' // لو عندك types
+
+export default function PhoneAuthPage() {
+  const [step, setStep] = useState<'phone' | 'otp'>('phone')
+  const [phone, setPhone] = useState('')
+  const [otp, setOtp] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  
+  const supabase = createClientComponentClient<Database>()
+
+  // خطوة 1: ابعت الكود
+  const sendOTP = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+
+    // لازم الرقم بصيغة دولية +2010...
+    const formattedPhone = phone.startsWith('+20') ? phone : `+20${phone.replace(/^0/, '')}`
+
+    const { error } = await supabase.auth.signInWithOtp({
+      phone: formattedPhone,
+      options: {
+        shouldCreateUser: true, // لو الرقم جديد يعمل حساب
+      }
+    })
+
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+      return
+    }
+
+    setPhone(formattedPhone)
+    setStep('otp')
+    setLoading(false)
+  }
+
+  // خطوة 2: اتحقق من الكود
+  const verifyOTP = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+
+    const { error } = await supabase.auth.verifyOtp({
+      phone,
+      token: otp,
+      type: 'sms'
+    })
+
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+      return
+    }
+
+    // كده اليوزر اتسجل/سجل دخول بنجاح
+    window.location.href = '/dashboard' // حوله للصفحة اللي عايزها
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
+        <h1 className="text-2xl font-bold text-center mb-6">
+          {step === 'phone' ? 'سجل برقمك' : 'أدخل الكود'}
+        </h1>
+
+        {error && (
+          <div className="bg-red-100 border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-sm">
+            {error}
+          </div>
+        )}
+
+        {step === 'phone' ? (
+          <form onSubmit={sendOTP} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">رقم الموبايل</label>
+              <div className="flex gap-2">
+                <span className="px-3 py-2 bg-gray-100 border rounded-lg">+20</span>
+                <input
+                  type="tel"
+                  placeholder="10xxxxxxxx"
+                  value={phone.replace('+20', '')}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                  maxLength={10}
+                  required
+                  className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">مثال: 10xxxxxxxx</p>
+            </div>
+            
+            <button
+              type="submit"
+              disabled={loading || phone.length !== 10}
+              className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
+            >
+              {loading ? 'جار الإرسال...' : 'ابعت كود التحقق'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={verifyOTP} className="space-y-4">
+            <p className="text-center text-sm text-gray-600">
+              بعتنا كود لـ {phone}
+            </p>
+            
+            <input
+              type="text"
+              placeholder="123456"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+              maxLength={6}
+              required
+              className="w-full px-4 py-3 border rounded-lg text-center text-2xl tracking-widest focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+            
+            <button
+              type="submit"
+              disabled={loading || otp.length !== 6}
+              className="w-full bg-green-600 text-white py-3 rounded-lg font-medium disabled:bg-gray-300"
+            >
+              {loading ? 'جار التحقق...' : 'أكد الكود'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStep('phone')}
+              className="w-full text-sm text-gray-500 underline"
+            >
+              غير الرقم
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
+متغيرات البيئة: في Replit Secrets حط:javascriptNEXT_PUBLIC_SUPABASE_URL=your_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_key

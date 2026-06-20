@@ -6,14 +6,14 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Truck, Mail, Lock, MapPin, User, ArrowLeft,
-  Eye, EyeOff, Loader2, CheckCircle, KeyRound,
+  Eye, EyeOff, Loader2, CheckCircle, KeyRound, Smartphone,
 } from 'lucide-react'
 import { useAuth } from '../../lib/auth-context'
 import type { AppUser } from '../../lib/auth-context'
 import { supabase } from '../../lib/supabase'
 import toast from 'react-hot-toast'
 
-type Mode = 'welcome' | 'login' | 'register-client' | 'register-courier' | 'forgot' | 'email-sent' | 'verify-otp'
+type Mode = 'welcome' | 'login' | 'register-client' | 'register-courier' | 'forgot' | 'email-sent' | 'verify-otp' | 'phone-otp' | 'phone-verify'
 
 const API = '/api'
 
@@ -61,6 +61,12 @@ export default function LoginPage() {
   const [sentEmail, setSentEmail] = useState('')
   const [otpCode, setOtpCode] = useState('')
   const [resendCooldown, setResendCooldown] = useState(0)
+
+  // Phone OTP state
+  const [phoneNum, setPhoneNum] = useState('')
+  const [phoneOtp, setPhoneOtp] = useState('')
+  const [phoneResendCooldown, setPhoneResendCooldown] = useState(0)
+  const [devOtp, setDevOtp] = useState('')
 
   const pendingRoleRef = useRef<'CLIENT' | 'COURIER'>('CLIENT')
   const pendingPassRef = useRef('')
@@ -431,6 +437,101 @@ export default function LoginPage() {
     }
   }
 
+  // ===== Phone OTP: إرسال الكود =====
+  async function handleSendPhoneOtp(e: React.FormEvent) {
+    e.preventDefault()
+    const cleaned = phoneNum.replace(/\D/g, '')
+    if (!/^01[0-9]{9}$/.test(cleaned)) {
+      toast.error('رقم التليفون غلط — مثال: 01012345678')
+      return
+    }
+    if (!checkRateLimit(`phone-otp:${cleaned}`, 3)) {
+      toast.error('حاولت كتير — انتظر دقيقة وجرب تاني')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch(`${API}/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleaned, purpose: 'login' }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'فشل إرسال الكود')
+        return
+      }
+      toast.success('📱 تم إرسال كود التحقق!')
+      setPhoneOtp('')
+      setDevOtp(data.devOtp || '')
+      setMode('phone-verify')
+      startPhoneResendCooldown()
+    } catch {
+      toast.error('مشكلة في الاتصال، جرب تاني')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ===== Phone OTP: التحقق من الكود وتسجيل الدخول =====
+  async function handleVerifyPhoneOtp(e: React.FormEvent) {
+    e.preventDefault()
+    const cleaned = phoneNum.replace(/\D/g, '')
+    if (phoneOtp.length !== 6) {
+      toast.error('ادخل الكود المكون من 6 أرقام')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch(`${API}/auth/verify-phone-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleaned, otp: phoneOtp }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'الكود غلط أو انتهت صلاحيته')
+        return
+      }
+
+      const roleMap: Record<string, AppUser['role']> = {
+        CLIENT: 'client', COURIER: 'courier', ADMIN: 'admin',
+      }
+      const appUser: AppUser = {
+        id: data.user.id,
+        name: data.user.name,
+        phone: data.user.phone,
+        email: null,
+        role: roleMap[data.user.role] || 'client',
+        avatar: null,
+        address: data.user.address || null,
+        onboarded: true,
+        courierStatus: data.user.courierStatus || null,
+        courierId: data.user.courierId || null,
+      }
+      login(appUser, data.token)
+      toast.success(`أهلاً ${appUser.name}! 👋`)
+      const dest = appUser.role === 'courier'
+        ? '/courier/dashboard'
+        : appUser.role === 'admin' ? '/admin-secret' : '/'
+      navigate(dest, { replace: true })
+    } catch {
+      toast.error('مشكلة في الاتصال، جرب تاني')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function startPhoneResendCooldown() {
+    setPhoneResendCooldown(60)
+    const iv = setInterval(() => {
+      setPhoneResendCooldown(prev => {
+        if (prev <= 1) { clearInterval(iv); return 0 }
+        return prev - 1
+      })
+    }, 1000)
+  }
+
   // ===== نسيت الباسورد =====
   async function handleForgotPassword(e: React.FormEvent) {
     e.preventDefault()
@@ -550,7 +651,14 @@ export default function LoginPage() {
               onClick={() => setMode('login')}
               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-orange-200 transition-all active:scale-95"
             >
-              دخول بحسابي
+              دخول بالإيميل
+            </button>
+            <button
+              onClick={() => { setPhoneNum(''); setMode('phone-otp') }}
+              className="w-full bg-green-500 hover:bg-green-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-green-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+            >
+              <Smartphone size={20} />
+              دخول برقم الموبايل (OTP)
             </button>
             <div className="text-center text-gray-400 text-sm font-medium">أو سجّل حساب جديد</div>
             <button
@@ -885,6 +993,131 @@ export default function LoginPage() {
             </Field>
             <SubmitBtn loading={loading} label="📧 إرسال رابط الاسترداد →" />
             <BackBtn onClick={() => setMode('login')} />
+          </form>
+        )}
+
+        {/* Phone OTP - Step 1: Enter Phone */}
+        {mode === 'phone-otp' && (
+          <form onSubmit={handleSendPhoneOtp} className="space-y-5">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <Smartphone className="text-green-500" size={32} />
+              </div>
+              <h2 className="text-xl font-black">دخول برقم الموبايل</h2>
+              <p className="text-gray-500 text-sm mt-1">هنبعتلك كود تحقق مكون من 6 أرقام</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2 text-right">رقم الموبايل</label>
+              <div className="flex gap-2">
+                <span className="flex items-center px-3 py-3 bg-gray-100 border-2 border-gray-200 rounded-2xl text-gray-600 font-bold text-sm whitespace-nowrap">
+                  +20
+                </span>
+                <input
+                  type="tel"
+                  value={phoneNum}
+                  onChange={e => setPhoneNum(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                  placeholder="01012345678"
+                  maxLength={11}
+                  dir="ltr"
+                  required
+                  autoFocus
+                  inputMode="numeric"
+                  className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-2xl focus:border-green-400 focus:outline-none text-center font-mono text-lg bg-gray-50"
+                />
+              </div>
+              <p className="text-xs text-gray-400 mt-1 text-right">مثال: 01012345678 (يجب أن يكون مسجل في التطبيق)</p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || phoneNum.replace(/\D/g, '').length < 11}
+              className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-green-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+            >
+              {loading
+                ? <><Loader2 size={20} className="animate-spin" /> جاري الإرسال...</>
+                : <><Smartphone size={20} /> ابعت كود التحقق →</>
+              }
+            </button>
+
+            <BackBtn onClick={() => setMode('welcome')} />
+          </form>
+        )}
+
+        {/* Phone OTP - Step 2: Enter OTP */}
+        {mode === 'phone-verify' && (
+          <form onSubmit={handleVerifyPhoneOtp} className="space-y-5">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <CheckCircle className="text-green-500" size={32} />
+              </div>
+              <h2 className="text-xl font-black">ادخل كود التحقق</h2>
+              <p className="text-gray-500 text-sm mt-1">
+                بعتنا كود لـ{' '}
+                <span className="font-bold text-green-600" dir="ltr">+20{phoneNum.replace(/\D/g, '')}</span>
+              </p>
+            </div>
+
+            {/* Dev mode: show OTP */}
+            {devOtp && (
+              <div className="bg-yellow-50 border-2 border-yellow-300 rounded-2xl p-3 text-center">
+                <p className="text-yellow-700 text-xs font-bold mb-1">🔧 وضع التطوير — الكود:</p>
+                <p className="text-yellow-900 text-2xl font-black tracking-widest" dir="ltr">{devOtp}</p>
+                <button
+                  type="button"
+                  onClick={() => setPhoneOtp(devOtp)}
+                  className="mt-2 text-xs text-yellow-600 underline"
+                >
+                  انقر لملء الكود تلقائياً
+                </button>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2 text-center">
+                الكود المكون من 6 أرقام
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                value={phoneOtp}
+                onChange={e => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                dir="ltr"
+                autoFocus
+                autoComplete="one-time-code"
+                className="w-full text-center text-4xl font-black tracking-[0.5em] py-4 border-2 border-gray-200 rounded-2xl focus:border-green-400 focus:outline-none bg-gray-50 text-gray-800"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || phoneOtp.length !== 6}
+              className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-green-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+            >
+              {loading
+                ? <><Loader2 size={20} className="animate-spin" /> جاري التحقق...</>
+                : <><CheckCircle size={20} /> تأكيد الكود والدخول</>
+              }
+            </button>
+
+            <div className="text-center">
+              {phoneResendCooldown > 0 ? (
+                <p className="text-gray-400 text-sm">إعادة الإرسال بعد {phoneResendCooldown} ثانية</p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { setMode('phone-otp') }}
+                  className="text-green-500 text-sm font-semibold hover:text-green-700 transition-colors"
+                >
+                  📱 إعادة إرسال الكود
+                </button>
+              )}
+            </div>
+
+            <BackBtn onClick={() => setMode('phone-otp')} />
           </form>
         )}
 
