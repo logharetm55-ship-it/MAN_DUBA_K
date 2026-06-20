@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { getSupabaseClient } from '../lib/supabase'
 import type { Env } from '../index'
 import { requireRole } from '../middleware/auth'
+import { banUser, unbanUser } from '../lib/banned-store'
 
 export const adminRouter = new Hono<{ Bindings: Env }>()
 
@@ -111,18 +112,25 @@ adminRouter.patch('/couriers/:id/approve', async (c) => {
   }
 
   const schema = z.object({
-    status: z.enum(['APPROVED', 'REJECTED', 'SUSPENDED']),
+    status: z.enum(['APPROVED', 'REJECTED', 'SUSPENDED', 'PENDING_REVIEW']),
     reason: z.string().max(500).optional(),
+    clearImages: z.boolean().optional(),
   })
   const parsed = schema.safeParse(body)
   if (!parsed.success) return c.json({ error: 'حالة غير صحيحة' }, 400)
 
-  const { status } = parsed.data
+  const { status, clearImages } = parsed.data
   const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+
+  const dbUpdate: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
+  if (clearImages) {
+    dbUpdate.id_front_image_url = null
+    dbUpdate.id_back_image_url = null
+  }
 
   const { data: updatedCourier, error } = await supabase
     .from('couriers')
-    .update({ status, updated_at: new Date().toISOString() })
+    .update(dbUpdate)
     .eq('id', courierId)
     .select('user_id, name')
     .single()
@@ -132,12 +140,15 @@ adminRouter.patch('/couriers/:id/approve', async (c) => {
   // إشعار للمندوب بنتيجة المراجعة
   if (updatedCourier?.user_id) {
     const { createNotification } = await import('./notifications')
-    const notifMap = {
+    const notifMap: Record<string, { title: string; message: string; icon: string }> = {
       APPROVED: { title: '🎉 تمت الموافقة على حسابك', message: 'مبروك! حسابك كمندوب تمت الموافقة عليه — يمكنك الآن قبول الطلبات وبدء العمل', icon: '✅' },
       REJECTED: { title: '❌ تم رفض حسابك', message: 'للأسف تم رفض طلب انضمامك — تواصل معنا لمعرفة السبب', icon: '❌' },
       SUSPENDED: { title: '⏸️ تم إيقاف حسابك مؤقتاً', message: 'تم إيقاف حسابك مؤقتاً — تواصل مع الإدارة', icon: '⚠️' },
+      PENDING_REVIEW: clearImages
+        ? { title: '📋 يرجى إعادة رفع صور البطاقة', message: 'الصور المرفوعة غير واضحة أو غير صحيحة — يرجى العودة لصفحة التسجيل ورفع صور البطاقة مجدداً بشكل صحيح', icon: '🔄' }
+        : null as unknown as { title: string; message: string; icon: string },
     }
-    const notif = notifMap[status as keyof typeof notifMap]
+    const notif = notifMap[status]
     if (notif) {
       createNotification(supabase, updatedCourier.user_id, 'courier', notif.title, notif.message, notif.icon).catch(() => {})
     }
@@ -145,12 +156,77 @@ adminRouter.patch('/couriers/:id/approve', async (c) => {
 
   return c.json({
     success: true,
-    message: status === 'APPROVED'
-      ? 'تم الموافقة على المندوب'
-      : status === 'REJECTED'
-      ? 'تم رفض المندوب'
-      : 'تم إيقاف المندوب',
+    message: status === 'APPROVED' ? 'تم الموافقة على المندوب'
+      : status === 'REJECTED' ? 'تم رفض المندوب'
+      : status === 'SUSPENDED' ? 'تم إيقاف المندوب'
+      : 'تم طلب إعادة إرسال البيانات',
   })
+})
+
+// =====================
+// POST /admin/couriers/:id/ban  — حظر مندوب كامل
+// POST /admin/clients/:id/ban   — حظر عميل كامل
+// =====================
+adminRouter.post('/couriers/:id/ban', async (c) => {
+  const courierId = c.req.param('id')
+  if (!courierId) return c.json({ error: 'معرّف مندوب غير صحيح' }, 400)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+
+  // جلب user_id للمندوب
+  const { data: courier } = await supabase.from('couriers').select('user_id').eq('id', courierId).single()
+  if (!courier?.user_id) return c.json({ error: 'المندوب مش موجود' }, 404)
+
+  // تعطيل حساب المندوب في جدول couriers
+  await supabase.from('couriers').update({ status: 'SUSPENDED', updated_at: new Date().toISOString() }).eq('id', courierId)
+
+  // حظر المستخدم في الذاكرة + محاولة تحديث DB
+  banUser(courier.user_id)
+  await supabase.from('users').update({ is_banned: true, updated_at: new Date().toISOString() }).eq('id', courier.user_id).then(() => {})
+
+  const { createNotification } = await import('./notifications')
+  createNotification(supabase, courier.user_id, 'courier', '🚫 تم حظر حسابك', 'تم حظر حسابك نهائياً بسبب مخالفة شروط الاستخدام. تواصل مع الدعم إذا كنت تعتقد أن هذا خطأ.', '🚫').catch(() => {})
+
+  return c.json({ success: true, message: 'تم حظر المندوب' })
+})
+
+adminRouter.post('/couriers/:id/unban', async (c) => {
+  const courierId = c.req.param('id')
+  if (!courierId) return c.json({ error: 'معرّف مندوب غير صحيح' }, 400)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+
+  const { data: courier } = await supabase.from('couriers').select('user_id').eq('id', courierId).single()
+  if (!courier?.user_id) return c.json({ error: 'المندوب مش موجود' }, 404)
+
+  unbanUser(courier.user_id)
+  await supabase.from('users').update({ is_banned: false, updated_at: new Date().toISOString() }).eq('id', courier.user_id).then(() => {})
+  await supabase.from('couriers').update({ status: 'PENDING_REVIEW', updated_at: new Date().toISOString() }).eq('id', courierId)
+
+  return c.json({ success: true, message: 'تم رفع الحظر' })
+})
+
+adminRouter.post('/clients/:id/ban', async (c) => {
+  const clientId = c.req.param('id')
+  if (!clientId) return c.json({ error: 'معرّف العميل غير صحيح' }, 400)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+
+  banUser(clientId)
+  await supabase.from('users').update({ is_banned: true, updated_at: new Date().toISOString() }).eq('id', clientId).then(() => {})
+
+  const { createNotification } = await import('./notifications')
+  createNotification(supabase, clientId, 'client', '🚫 تم حظر حسابك', 'تم حظر حسابك نهائياً بسبب مخالفة شروط الاستخدام. تواصل مع الدعم.', '🚫').catch(() => {})
+
+  return c.json({ success: true, message: 'تم حظر العميل' })
+})
+
+adminRouter.post('/clients/:id/unban', async (c) => {
+  const clientId = c.req.param('id')
+  if (!clientId) return c.json({ error: 'معرّف العميل غير صحيح' }, 400)
+  const supabase = getSupabaseClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY)
+
+  unbanUser(clientId)
+  await supabase.from('users').update({ is_banned: false, updated_at: new Date().toISOString() }).eq('id', clientId).then(() => {})
+
+  return c.json({ success: true, message: 'تم رفع الحظر' })
 })
 
 // =====================
@@ -394,10 +470,13 @@ adminRouter.get('/ads/:id/orders', async (c) => {
       order_items(name, quantity, price, shop_name),
       users!orders_client_id_fkey(name, phone)
     `)
-    .like('notes', `%[ad:${adId}]%`)
+    .like('notes', `%adref_${adId}%`)
     .order('created_at', { ascending: false })
     .limit(100)
 
-  if (error) return c.json({ success: true, orders: [] })
+  if (error) {
+    console.error('[admin] ads orders error:', error)
+    return c.json({ success: true, orders: [] })
+  }
   return c.json({ success: true, orders: data || [] })
 })

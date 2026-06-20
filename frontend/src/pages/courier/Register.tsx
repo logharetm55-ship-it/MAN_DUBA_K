@@ -1,5 +1,5 @@
 // =============================================================
-// Courier Register - رفع صور البطاقة بعد إنشاء الحساب
+// Courier Register - رفع صور البطاقة إجباري — بدون تخطي
 // =============================================================
 
 import { useState, useRef } from 'react'
@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {
   CreditCard, Upload, CheckCircle, ArrowLeft,
-  Clock, ShieldCheck, Loader2
+  Clock, ShieldCheck, Loader2, AlertTriangle, RotateCcw
 } from 'lucide-react'
 import { useAuth } from '../../lib/auth-context'
 
@@ -45,6 +45,26 @@ export default function CourierRegister() {
     )
   }
 
+  // حالة الرفض النهائي
+  if (user.courierStatus === 'REJECTED') {
+    return (
+      <div className="max-w-md mx-auto text-center py-12 space-y-5">
+        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+          <AlertTriangle className="text-red-500" size={40} />
+        </div>
+        <h2 className="text-xl font-black text-red-600">تم رفض طلبك ❌</h2>
+        <p className="text-gray-500">للأسف تم رفض طلب انضمامك — تواصل مع الدعم لمعرفة السبب</p>
+        <div className="card text-right space-y-2 text-sm text-gray-600">
+          <p>📞 تواصل مع الدعم عبر واتساب</p>
+          <p>📧 أو راسلنا على البريد الإلكتروني</p>
+        </div>
+        <button onClick={() => navigate('/')} className="btn-secondary w-full">
+          العودة للرئيسية
+        </button>
+      </div>
+    )
+  }
+
   function handleFileChange(
     file: File | null,
     setFile: (f: File | null) => void,
@@ -64,7 +84,7 @@ export default function CourierRegister() {
 
   async function uploadImages() {
     if (!frontFile || !backFile) {
-      toast.error('ارفع صورة وجه وضهر البطاقة')
+      toast.error('⚠️ لازم ترفع صورة وجه وضهر البطاقة — هذا الخطوة إجبارية')
       return
     }
     if (!token) {
@@ -75,7 +95,6 @@ export default function CourierRegister() {
 
     setSubmitting(true)
     try {
-      // رفع الصور على /api/upload/id (اسم الـ fields: front + back)
       const formData = new FormData()
       formData.append('front', frontFile)
       formData.append('back', backFile)
@@ -91,16 +110,13 @@ export default function CourierRegister() {
 
       if (uploadRes.ok) {
         const uploadData = await uploadRes.json()
-        // استخدم الـ keys من R2 كـ URLs مؤقتة
         if (uploadData.keys?.front) frontUrl = `/api/upload/view?key=${encodeURIComponent(uploadData.keys.front)}`
         if (uploadData.keys?.back) backUrl = `/api/upload/view?key=${encodeURIComponent(uploadData.keys.back)}`
-        toast.success('✅ تم رفع الصور!')
+        toast.success('✅ تم رفع الصور بنجاح!')
       } else {
-        // Fallback: استخدم الـ base64 preview
         toast('⚠️ تم حفظ الصور محلياً — سيتم المراجعة', { icon: 'ℹ️' })
       }
 
-      // حفظ البيانات في الـ backend
       const updateRes = await fetch('/api/auth/update-courier-info', {
         method: 'POST',
         headers: {
@@ -130,12 +146,36 @@ export default function CourierRegister() {
     }
   }
 
+  // حالة إعادة الإرسال — المندوب طُلب منه إعادة إرسال صوره
+  const isResubmitMode = user.courierStatus === 'PENDING_REVIEW'
+
   return (
     <div className="max-w-lg mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-black">أكمّل تسجيلك كمندوب 🛵</h1>
-        <p className="text-gray-500 text-sm mt-1">ارفع صور البطاقة الشخصية عشان الأدمن يراجع حسابك</p>
+        <h1 className="text-2xl font-black">
+          {isResubmitMode ? '🔄 إعادة رفع صور البطاقة' : 'أكمّل تسجيلك كمندوب 🛵'}
+        </h1>
+        <p className="text-gray-500 text-sm mt-1">
+          {isResubmitMode
+            ? 'طُلب منك إعادة رفع صور البطاقة بشكل صحيح — يرجى التأكد من وضوح الصورة'
+            : 'ارفع صور البطاقة الشخصية عشان الأدمن يراجع حسابك'}
+        </p>
       </div>
+
+      {/* إشعار إعادة الإرسال */}
+      {isResubmitMode && (
+        <div className="bg-orange-50 border-2 border-orange-200 rounded-2xl p-4">
+          <div className="flex items-start gap-3">
+            <RotateCcw className="text-orange-500 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <p className="font-bold text-orange-700">مطلوب منك إعادة إرسال صور البطاقة</p>
+              <p className="text-sm text-orange-600 mt-1">
+                الصور السابقة غير واضحة أو غير صحيحة — ارفع صور جديدة واضحة للوجه والضهر
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Progress */}
       <div className="flex items-center gap-2">
@@ -185,6 +225,7 @@ export default function CourierRegister() {
             <h2 className="font-bold text-lg flex items-center gap-2">
               <CreditCard className="text-orange-500" size={20} />
               صور البطاقة الشخصية
+              <span className="text-xs bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full">إجباري</span>
             </h2>
 
             {[
@@ -225,6 +266,11 @@ export default function CourierRegister() {
             ))}
           </div>
 
+          {/* تنبيه إجبارية الرفع */}
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+            <strong>⚠️ مهم:</strong> رفع صور البطاقة إجباري للتحقق من هويتك — لا يمكن تخطي هذه الخطوة
+          </div>
+
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
             <ShieldCheck size={16} className="inline ml-1" />
             <strong>أمان:</strong> صورك محمية ومش بتتشار مع أي جهة خارجية
@@ -233,21 +279,21 @@ export default function CourierRegister() {
           <button
             disabled={submitting || !frontFile || !backFile}
             onClick={uploadImages}
-            className="btn-primary w-full flex items-center justify-center gap-2 text-lg"
+            className="btn-primary w-full flex items-center justify-center gap-2 text-lg disabled:opacity-50"
           >
             {submitting ? (
               <><Loader2 size={20} className="animate-spin" />جاري الرفع...</>
             ) : (
-              <><Upload size={20} />رفع الصور والمتابعة</>
+              <><Upload size={20} />رفع الصور وإرسال الطلب</>
             )}
           </button>
 
-          <button
-            onClick={() => setStep('review')}
-            className="w-full text-gray-400 text-sm hover:text-gray-600 transition-colors"
-          >
-            تخطّي الآن (ارفع لاحقاً)
-          </button>
+          {/* تلميح بدون زر تخطي */}
+          {(!frontFile || !backFile) && (
+            <p className="text-center text-xs text-gray-400">
+              يجب اختيار صورتين (وجه + ضهر البطاقة) لتفعيل زر الإرسال
+            </p>
+          )}
         </div>
       )}
 
@@ -278,16 +324,16 @@ export default function CourierRegister() {
                 تم إنشاء حسابك بنجاح
               </div>
               <div className="flex items-center gap-2">
-                <span className={frontFile ? 'text-green-500' : 'text-gray-300'}>
-                  {frontFile ? '✓' : '○'}
+                <span className={frontFile ? 'text-green-500' : 'text-red-400'}>
+                  {frontFile ? '✓' : '✗'}
                 </span>
-                {frontFile ? 'تم رفع وجه البطاقة' : 'لم يتم رفع وجه البطاقة بعد'}
+                {frontFile ? 'تم رفع وجه البطاقة ✅' : 'وجه البطاقة لم يُرفع'}
               </div>
               <div className="flex items-center gap-2">
-                <span className={backFile ? 'text-green-500' : 'text-gray-300'}>
-                  {backFile ? '✓' : '○'}
+                <span className={backFile ? 'text-green-500' : 'text-red-400'}>
+                  {backFile ? '✓' : '✗'}
                 </span>
-                {backFile ? 'تم رفع ضهر البطاقة' : 'لم يتم رفع ضهر البطاقة بعد'}
+                {backFile ? 'تم رفع ضهر البطاقة ✅' : 'ضهر البطاقة لم يُرفع'}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-yellow-500">⏳</span>

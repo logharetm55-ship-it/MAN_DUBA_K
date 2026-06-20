@@ -101,8 +101,8 @@ ordersRouter.post('/', requireRole('CLIENT', 'ADMIN'), async (c) => {
     const numShops = shops.length
     const priceResult = calculateShoppingFee(numShops, pricing)
 
-    // دمج ملاحظات العميل مع tag الإعلان
-    const notesWithAd = [notes, adId ? `[ad:${adId}]` : ''].filter(Boolean).join(' ') || null
+    // دمج ملاحظات العميل مع tag الإعلان (بدون brackets عشان LIKE يشتغل صح)
+    const notesWithAd = [notes, adId ? `adref_${adId}` : ''].filter(Boolean).join(' ') || null
 
     // زيادة عداد الضغطات على الإعلان عند تأكيد الأوردر
     if (adId) {

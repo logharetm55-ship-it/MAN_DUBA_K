@@ -4,6 +4,7 @@
 
 import { createMiddleware } from 'hono/factory'
 import { verifyJWT } from '../lib/jwt-utils'
+import { isBanned } from '../lib/banned-store'
 import type { Env } from '../index'
 
 export type AuthUser = {
@@ -42,6 +43,11 @@ export const authMiddleware = createMiddleware<{ Bindings: Env }>(async (c, next
 
     if (!userId) {
       return c.json({ error: 'بيانات التوكن غير مكتملة' }, 401)
+    }
+
+    // Check if user is banned (skip for ADMINs)
+    if (role !== 'ADMIN' && isBanned(userId)) {
+      return c.json({ error: 'تم حظر هذا الحساب. تواصل مع الدعم.', banned: true }, 403)
     }
 
     c.set('user', {
