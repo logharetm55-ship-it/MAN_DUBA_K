@@ -1,5 +1,5 @@
 {
-  "installCommand": "npm install --ignore-scripts --no-audit --no-fund || echo 'npm crashed but packages installed'",
+  "installCommand": "corepack enable && corepack prepare pnpm@8.15.4 --activate && pnpm install --frozen-lockfile --ignore-scripts",
   "buildCommand": "npm run build",
   "outputDirectory": "frontend/dist"
 }
