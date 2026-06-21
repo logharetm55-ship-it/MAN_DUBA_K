@@ -143,3 +143,4 @@ npx prisma migrate deploy
 اطلع على `.env.example` و `frontend/.env.example` لقائمة كاملة.
 
 **لا ترفع أبداً ملف `.env` الحقيقي على GitHub.**
+"# MAN_DUBA_K" 
