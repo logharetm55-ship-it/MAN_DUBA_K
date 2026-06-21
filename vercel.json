@@ -1,5 +1,5 @@
 {
-  "installCommand": "corepack enable && corepack prepare pnpm@8.15.4 --activate && pnpm install --frozen-lockfile --ignore-scripts",
+  "installCommand": "corepack enable && corepack prepare pnpm@8.15.4 --activate && pnpm install --no-frozen-lockfile --ignore-scripts",
   "buildCommand": "npm run build",
   "outputDirectory": "frontend/dist"
 }
