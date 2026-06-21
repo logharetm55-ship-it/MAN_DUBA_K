@@ -124,8 +124,8 @@ export default function CourierRegister() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          name: user.name || '',
-          address: user.address || 'غير محدد',
+          name: user?.name || '',
+          address: user?.address || 'غير محدد',
           idFrontImageUrl: frontUrl || 'pending',
           idBackImageUrl: backUrl || 'pending',
         }),
