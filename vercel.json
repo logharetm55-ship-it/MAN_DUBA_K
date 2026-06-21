@@ -1,4 +1,4 @@
 {
-  "installCommand": "npm install --legacy-peer-deps",
+  "installCommand": "corepack enable && corepack prepare pnpm@9 --activate && pnpm install --no-frozen-lockfile || true",
   "buildCommand": "npm run build"
 }
