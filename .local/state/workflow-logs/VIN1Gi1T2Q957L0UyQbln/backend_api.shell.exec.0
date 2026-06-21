@@ -1,0 +1,269 @@
+
+🚀 مندوبك API يشتغل على: http://localhost:8787
+📦 Endpoints:
+  GET  /api/pricing/calculate
+  POST /api/orders
+  GET  /api/orders/pending
+  POST /api/orders/:id/accept
+  POST /api/couriers/register
+  POST /api/upload-id
+  GET  /api/admin/dashboard
+<-- GET /
+--> GET / [32m200[0m 5ms
+<-- GET /favicon.ico
+--> GET /favicon.ico [33m404[0m 1ms
+<-- GET /api/upload/view?key=product%2Fcmqipj0900003p0211jai8h1h%2F1781871935700.png
+--> GET /api/upload/view?key=product%2Fcmqipj0900003p0211jai8h1h%2F1781871935700.png [33m404[0m 1ms
+<-- GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228
+--> GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228 [33m404[0m 517ms
+<-- GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228
+--> GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228 [32m200[0m 394ms
+<-- POST /api/orders
+Order creation error: {
+  code: [32m'23503'[39m,
+  details: [32m'Key (client_id)=(test-user-id) is not present in table "users".'[39m,
+  hint: [1mnull[22m,
+  message: [32m'insert or update on table "orders" violates foreign key constraint "orders_client_id_fkey"'[39m
+}
+--> POST /api/orders [31m500[0m 715ms
+<-- GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228&type=SHOPPING&numShops=2
+--> GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228&type=SHOPPING&numShops=2 [32m200[0m 407ms
+<-- GET /api/pricing/calculate?pickupLat=29.95&pickupLng=31.0&deliveryLat=29.96&deliveryLng=31.01
+--> GET /api/pricing/calculate?pickupLat=29.95&pickupLng=31.0&deliveryLat=29.96&deliveryLng=31.01 [32m200[0m 218ms
+<-- GET /api/upload/view?key=product%2Fcmqipj0900003p0211jai8h1h%2F1781871935700.png
+--> GET /api/upload/view?key=product%2Fcmqipj0900003p0211jai8h1h%2F1781871935700.png [33m404[0m 1ms
+<-- GET /api/upload/view?key=product%2Fcmqipj0900003p0211jai8h1h%2F1781871935700.png
+--> GET /api/upload/view?key=product%2Fcmqipj0900003p0211jai8h1h%2F1781871935700.png [33m404[0m 2ms
+<-- POST /api/auth/auto-confirm
+--> POST /api/auth/auto-confirm [32m200[0m 349ms
+<-- POST /api/auth/sync-email-user
+--> POST /api/auth/sync-email-user [32m200[0m 634ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 190ms
+<-- GET /api/upload/view?key=product%2Fcmqipj0900003p0211jai8h1h%2F1781871935700.png
+--> GET /api/upload/view?key=product%2Fcmqipj0900003p0211jai8h1h%2F1781871935700.png [33m404[0m 1ms
+<-- GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228&numShops=1&type=SHOPPING
+--> GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228&numShops=1&type=SHOPPING [32m200[0m 510ms
+<-- POST /api/orders
+--> POST /api/orders [32m201[0m 539ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 180ms
+<-- GET /api/upload/view?key=product%2Fcmqipj0900003p0211jai8h1h%2F1781871935700.png
+--> GET /api/upload/view?key=product%2Fcmqipj0900003p0211jai8h1h%2F1781871935700.png [33m404[0m 1ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 411ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 182ms
+<-- POST /api/auth/login
+--> POST /api/auth/login [32m200[0m 462ms
+<-- GET /api/admin/security-alerts
+<-- GET /api/admin/dashboard
+<-- GET /api/notifications
+--> GET /api/admin/security-alerts [32m200[0m 200ms
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/dashboard [32m200[0m 517ms
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 509ms
+--> GET /api/admin/security-alerts [32m200[0m 200ms
+<-- GET /api/admin/dashboard
+--> GET /api/admin/dashboard [32m200[0m 209ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 218ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 196ms
+<-- GET /api/admin/dashboard
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/dashboard [32m200[0m 497ms
+--> GET /api/admin/security-alerts [32m200[0m 520ms
+<-- GET /api/admin/dashboard
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/security-alerts [32m200[0m 181ms
+--> GET /api/admin/dashboard [32m200[0m 199ms
+<-- GET /api/admin/couriers
+--> GET /api/admin/couriers [32m200[0m 178ms
+<-- GET /api/admin/couriers
+--> GET /api/admin/couriers [32m200[0m 174ms
+<-- GET /api/admin/clients
+--> GET /api/admin/clients [32m200[0m 194ms
+<-- GET /api/admin/clients
+--> GET /api/admin/clients [32m200[0m 176ms
+<-- GET /api/admin/ads
+--> GET /api/admin/ads [32m200[0m 174ms
+<-- GET /api/admin/ads
+<-- GET /api/upload/view?key=product%2Fcmqipj0900003p0211jai8h1h%2F1781871935700.png
+--> GET /api/upload/view?key=product%2Fcmqipj0900003p0211jai8h1h%2F1781871935700.png [33m404[0m 0ms
+--> GET /api/admin/ads [32m200[0m 183ms
+<-- DELETE /api/admin/ads/c33602de-8ba2-4a75-8231-af0fc06c4eb2
+--> DELETE /api/admin/ads/c33602de-8ba2-4a75-8231-af0fc06c4eb2 [32m200[0m 217ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 183ms
+<-- POST /api/upload/product
+--> POST /api/upload/product [32m200[0m 4s
+<-- POST /api/admin/ads
+--> POST /api/admin/ads [31m500[0m 300ms
+<-- POST /api/admin/ads
+--> POST /api/admin/ads [31m500[0m 206ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 181ms
+<-- GET /api/admin/dashboard
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/security-alerts [32m200[0m 208ms
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/security-alerts [32m200[0m 212ms
+--> GET /api/admin/dashboard [32m200[0m 659ms
+<-- GET /api/admin/dashboard
+--> GET /api/admin/dashboard [32m200[0m 192ms
+<-- POST /api/auth/auto-confirm
+--> POST /api/auth/auto-confirm [32m200[0m 414ms
+<-- POST /api/auth/sync-email-user
+--> POST /api/auth/sync-email-user [32m200[0m 1s
+<-- GET /api/orders/pending
+<-- GET /api/orders/my
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 168ms
+--> GET /api/orders/pending [33m403[0m 177ms
+--> GET /api/orders/my [32m200[0m 381ms
+<-- GET /api/orders/pending
+--> GET /api/orders/pending [33m403[0m 177ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 373ms
+<-- GET /api/orders/pending
+--> GET /api/orders/pending [33m403[0m 216ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 235ms
+<-- POST /api/auth/login
+--> POST /api/auth/login [32m200[0m 217ms
+<-- GET /api/admin/dashboard
+<-- GET /api/notifications
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/dashboard [32m200[0m 249ms
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 208ms
+--> GET /api/admin/security-alerts [32m200[0m 243ms
+<-- GET /api/admin/dashboard
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/dashboard [32m200[0m 181ms
+--> GET /api/admin/security-alerts [32m200[0m 186ms
+<-- GET /api/admin/couriers
+--> GET /api/admin/couriers [32m200[0m 252ms
+<-- GET /api/admin/couriers
+--> GET /api/admin/couriers [32m200[0m 179ms
+<-- PATCH /api/admin/couriers/23af8d8f-20be-4440-b9ab-a9b9a4a6864d/approve
+--> PATCH /api/admin/couriers/23af8d8f-20be-4440-b9ab-a9b9a4a6864d/approve [32m200[0m 267ms
+<-- POST /api/auth/sync-email-user
+--> POST /api/auth/sync-email-user [32m200[0m 628ms
+<-- GET /api/orders/pending
+<-- GET /api/notifications
+<-- GET /api/orders/my
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 205ms
+--> GET /api/orders/pending [32m200[0m 412ms
+--> GET /api/orders/my [32m200[0m 416ms
+<-- GET /api/orders/my
+<-- GET /api/orders/pending
+--> GET /api/orders/my [32m200[0m 357ms
+--> GET /api/orders/pending [32m200[0m 223ms
+<-- GET /api/orders/pending
+--> GET /api/orders/pending [32m200[0m 447ms
+<-- GET /api/notifications
+<-- GET /api/orders/pending
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 203ms
+--> GET /api/orders/pending [32m200[0m 449ms
+<-- GET /api/orders/pending
+<-- GET /api/orders/my
+--> GET /api/orders/pending [32m200[0m 173ms
+--> GET /api/orders/my [32m200[0m 351ms
+<-- GET /api/orders/pending
+--> GET /api/orders/pending [32m200[0m 427ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 237ms
+<-- GET /api/orders/pending
+<-- GET /api/orders/my
+--> GET /api/orders/pending [32m200[0m 488ms
+--> GET /api/orders/my [32m200[0m 368ms
+<-- GET /api/orders/pending
+<-- GET /api/orders/my
+--> GET /api/orders/pending [32m200[0m 177ms
+--> GET /api/orders/my [32m200[0m 373ms
+<-- POST /api/orders/9020665f-58d8-4c33-92cd-0a018d52b755/accept
+--> POST /api/orders/9020665f-58d8-4c33-92cd-0a018d52b755/accept [32m200[0m 755ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 353ms
+<-- GET /api/orders/pending
+--> GET /api/orders/pending [32m200[0m 429ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 180ms
+<-- POST /api/auth/sync-email-user
+--> POST /api/auth/sync-email-user [32m200[0m 451ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 173ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 241ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 186ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 221ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 210ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 175ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 195ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 257ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 206ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 240ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 194ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 201ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 400ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 230ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 235ms
+<-- GET /api/setup
+--> GET /api/setup [32m200[0m 374ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 207ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 350ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 203ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 200ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 246ms
+<-- GET /api/notifications
+[notifications] table error (likely not created yet): PGRST205 Could not find the table 'public.notifications' in the schema cache
+--> GET /api/notifications [32m200[0m 328ms

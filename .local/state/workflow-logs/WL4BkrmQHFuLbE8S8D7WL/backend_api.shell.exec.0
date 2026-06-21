@@ -1,0 +1,340 @@
+
+🚀 مندوبك API يشتغل على: http://localhost:8787
+📦 Endpoints:
+  GET  /api/pricing/calculate
+  POST /api/orders
+  GET  /api/orders/pending
+  POST /api/orders/:id/accept
+  POST /api/couriers/register
+  POST /api/upload-id
+  GET  /api/admin/dashboard
+<-- POST /api/auth/sync-email-user
+--> POST /api/auth/sync-email-user [32m200[0m 643ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 160ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 445ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 345ms
+<-- GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228
+--> GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228 [32m200[0m 196ms
+<-- POST /api/orders
+--> POST /api/orders [32m201[0m 763ms
+[notifications] DB insert warn: 42501
+[notifications] DB insert warn: 42501
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 150ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 137ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 297ms
+<-- POST /api/auth/login
+--> POST /api/auth/login [32m200[0m 396ms
+<-- GET /api/admin/dashboard
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/security-alerts [32m200[0m 412ms
+--> GET /api/admin/dashboard [32m200[0m 423ms
+<-- GET /api/notifications
+<-- GET /api/admin/security-alerts
+<-- GET /api/admin/dashboard
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 131ms
+--> GET /api/admin/security-alerts [32m200[0m 136ms
+--> GET /api/admin/dashboard [32m200[0m 373ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 140ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 138ms
+<-- GET /api/admin/orders?status=PENDING&page=1
+--> GET /api/admin/orders?status=PENDING&page=1 [32m200[0m 297ms
+<-- GET /api/admin/orders?status=ACCEPTED&page=1
+--> GET /api/admin/orders?status=ACCEPTED&page=1 [32m200[0m 146ms
+<-- GET /api/admin/orders?status=PENDING&page=1
+--> GET /api/admin/orders?status=PENDING&page=1 [32m200[0m 140ms
+<-- GET /api/admin/orders?status=PICKED_UP&page=1
+--> GET /api/admin/orders?status=PICKED_UP&page=1 [32m200[0m 182ms
+<-- GET /api/admin/orders?status=DELIVERED&page=1
+--> GET /api/admin/orders?status=DELIVERED&page=1 [32m200[0m 539ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 137ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 291ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 191ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 256ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 238ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 193ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 188ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 184ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 250ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 194ms
+<-- GET /api/admin/orders?status=PICKED_UP&page=1
+--> GET /api/admin/orders?status=PICKED_UP&page=1 [32m200[0m 220ms
+<-- GET /api/admin/orders?status=ACCEPTED&page=1
+--> GET /api/admin/orders?status=ACCEPTED&page=1 [32m200[0m 150ms
+<-- GET /api/admin/orders?status=PENDING&page=1
+--> GET /api/admin/orders?status=PENDING&page=1 [32m200[0m 156ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 143ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 154ms
+<-- GET /api/admin/orders?status=CANCELLED&page=1
+--> GET /api/admin/orders?status=CANCELLED&page=1 [32m200[0m 161ms
+<-- GET /api/admin/dashboard
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/security-alerts [32m200[0m 130ms
+--> GET /api/admin/dashboard [32m200[0m 400ms
+<-- GET /api/admin/security-alerts
+<-- GET /api/admin/dashboard
+--> GET /api/admin/security-alerts [32m200[0m 126ms
+--> GET /api/admin/dashboard [32m200[0m 167ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 139ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 139ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 169ms
+<-- GET /api/admin/dashboard
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/dashboard [32m200[0m 376ms
+--> GET /api/admin/security-alerts [32m200[0m 377ms
+<-- GET /api/admin/security-alerts
+<-- GET /api/admin/dashboard
+--> GET /api/admin/security-alerts [32m200[0m 131ms
+--> GET /api/admin/dashboard [32m200[0m 132ms
+<-- GET /api/admin/clients
+--> GET /api/admin/clients [32m200[0m 147ms
+<-- GET /api/admin/clients
+--> GET /api/admin/clients [32m200[0m 133ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 172ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 134ms
+<-- GET /api/admin/orders?status=DELIVERED&page=1
+--> GET /api/admin/orders?status=DELIVERED&page=1 [32m200[0m 177ms
+<-- GET /api/admin/orders?status=CANCELLED&page=1
+--> GET /api/admin/orders?status=CANCELLED&page=1 [32m200[0m 135ms
+<-- GET /api/admin/orders?status=PICKED_UP&page=1
+--> GET /api/admin/orders?status=PICKED_UP&page=1 [32m200[0m 133ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 140ms
+<-- GET /api/admin/dashboard
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/security-alerts [32m200[0m 161ms
+--> GET /api/admin/dashboard [32m200[0m 176ms
+<-- GET /api/admin/security-alerts
+<-- GET /api/admin/dashboard
+--> GET /api/admin/security-alerts [32m200[0m 126ms
+--> GET /api/admin/dashboard [32m200[0m 135ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 129ms
+<-- GET /api/admin/ads
+--> GET /api/admin/ads [32m200[0m 177ms
+<-- GET /api/admin/ads
+--> GET /api/admin/ads [32m200[0m 131ms
+<-- POST /api/upload/product
+--> POST /api/upload/product [32m200[0m 4s
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 216ms
+<-- POST /api/admin/ads
+--> POST /api/admin/ads [32m201[0m 209ms
+<-- GET /api/upload/view?key=product%2F0bc43227-1ca7-4a22-b65e-60201b76a55a%2F1781941089594.png
+--> GET /api/upload/view?key=product%2F0bc43227-1ca7-4a22-b65e-60201b76a55a%2F1781941089594.png [32m200[0m 2ms
+<-- POST /api/auth/sync-email-user
+--> POST /api/auth/sync-email-user [32m200[0m 320ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 145ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 202ms
+<-- POST /api/auth/login
+--> POST /api/auth/login [32m200[0m 164ms
+<-- GET /api/admin/dashboard
+<-- GET /api/admin/security-alerts
+<-- GET /api/notifications
+--> GET /api/admin/security-alerts [32m200[0m 168ms
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 172ms
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/dashboard [32m200[0m 381ms
+--> GET /api/admin/security-alerts [32m200[0m 126ms
+<-- GET /api/admin/dashboard
+--> GET /api/admin/dashboard [32m200[0m 133ms
+<-- GET /api/admin/ads
+--> GET /api/admin/ads [32m200[0m 133ms
+<-- GET /api/admin/ads
+--> GET /api/admin/ads [32m200[0m 132ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 186ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 178ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 252ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 205ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 179ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 178ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 250ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 486ms
+<-- GET /api/admin/dashboard
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/security-alerts [32m200[0m 196ms
+--> GET /api/admin/dashboard [32m200[0m 381ms
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/security-alerts [32m200[0m 130ms
+<-- GET /api/admin/dashboard
+--> GET /api/admin/dashboard [32m200[0m 143ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 136ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 132ms
+<-- GET /api/admin/couriers
+--> GET /api/admin/couriers [32m200[0m 140ms
+<-- GET /api/admin/couriers
+--> GET /api/admin/couriers [32m200[0m 132ms
+<-- GET /api/admin/clients
+--> GET /api/admin/clients [32m200[0m 130ms
+<-- GET /api/admin/clients
+--> GET /api/admin/clients [32m200[0m 130ms
+<-- GET /api/admin/couriers
+--> GET /api/admin/couriers [32m200[0m 129ms
+<-- GET /api/admin/couriers
+--> GET /api/admin/couriers [32m200[0m 128ms
+<-- GET /api/admin/dashboard
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/security-alerts [32m200[0m 159ms
+--> GET /api/admin/dashboard [32m200[0m 178ms
+<-- GET /api/admin/dashboard
+<-- GET /api/admin/security-alerts
+--> GET /api/admin/security-alerts [32m200[0m 128ms
+--> GET /api/admin/dashboard [32m200[0m 138ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 137ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 131ms
+<-- GET /api/admin/orders?status=DELIVERED&page=1
+--> GET /api/admin/orders?status=DELIVERED&page=1 [32m200[0m 138ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 128ms
+<-- GET /api/admin/orders?status=CANCELLED&page=1
+--> GET /api/admin/orders?status=CANCELLED&page=1 [32m200[0m 138ms
+<-- GET /api/admin/orders?status=ACCEPTED&page=1
+--> GET /api/admin/orders?status=ACCEPTED&page=1 [32m200[0m 138ms
+<-- GET /api/admin/orders?status=CANCELLED&page=1
+--> GET /api/admin/orders?status=CANCELLED&page=1 [32m200[0m 167ms
+<-- GET /api/admin/orders?status=DELIVERED&page=1
+--> GET /api/admin/orders?status=DELIVERED&page=1 [32m200[0m 131ms
+<-- GET /api/admin/orders?status=PICKED_UP&page=1
+--> GET /api/admin/orders?status=PICKED_UP&page=1 [32m200[0m 131ms
+<-- GET /api/admin/orders?status=ACCEPTED&page=1
+--> GET /api/admin/orders?status=ACCEPTED&page=1 [32m200[0m 130ms
+<-- GET /api/admin/orders?status=PENDING&page=1
+--> GET /api/admin/orders?status=PENDING&page=1 [32m200[0m 137ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 132ms
+<-- GET /api/upload/view?key=product%2F0bc43227-1ca7-4a22-b65e-60201b76a55a%2F1781941089594.png
+--> GET /api/upload/view?key=product%2F0bc43227-1ca7-4a22-b65e-60201b76a55a%2F1781941089594.png [32m200[0m 2ms
+<-- GET /api/upload/view?key=product%2F0bc43227-1ca7-4a22-b65e-60201b76a55a%2F1781941089594.png
+--> GET /api/upload/view?key=product%2F0bc43227-1ca7-4a22-b65e-60201b76a55a%2F1781941089594.png [32m200[0m 5ms
+<-- GET /api/upload/view?key=product%2F0bc43227-1ca7-4a22-b65e-60201b76a55a%2F1781941089594.png
+--> GET /api/upload/view?key=product%2F0bc43227-1ca7-4a22-b65e-60201b76a55a%2F1781941089594.png [32m200[0m 159ms
+<-- POST /api/auth/sync-email-user
+--> POST /api/auth/sync-email-user [32m200[0m 592ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 193ms
+<-- GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0444&deliveryLng=31.2357&numShops=1&type=SHOPPING
+--> GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0444&deliveryLng=31.2357&numShops=1&type=SHOPPING [32m200[0m 154ms
+<-- GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0444&deliveryLng=31.2357&numShops=1&type=SHOPPING
+--> GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0444&deliveryLng=31.2357&numShops=1&type=SHOPPING [32m200[0m 130ms
+<-- POST /api/orders
+--> POST /api/orders [32m201[0m 445ms
+[notifications] DB insert warn: 42501
+[notifications] DB insert warn: 42501
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 133ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 132ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 168ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 130ms
+<-- POST /api/auth/login
+--> POST /api/auth/login [32m200[0m 206ms
+<-- GET /api/admin/security-alerts
+<-- GET /api/admin/dashboard
+--> GET /api/admin/security-alerts [32m200[0m 143ms
+<-- GET /api/notifications
+--> GET /api/admin/dashboard [32m200[0m 374ms
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 129ms
+<-- GET /api/admin/security-alerts
+<-- GET /api/admin/dashboard
+--> GET /api/admin/security-alerts [32m200[0m 126ms
+--> GET /api/admin/dashboard [32m200[0m 136ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 139ms
+<-- GET /api/admin/orders?page=1
+--> GET /api/admin/orders?page=1 [32m200[0m 136ms
+<-- GET /api/admin/orders?status=PENDING&page=1
+--> GET /api/admin/orders?status=PENDING&page=1 [32m200[0m 324ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 130ms
+<-- GET /api/admin/clients
+--> GET /api/admin/clients [32m200[0m 158ms
+<-- GET /api/admin/clients
+--> GET /api/admin/clients [32m200[0m 143ms
+<-- GET /api/admin/ads
+--> GET /api/admin/ads [32m200[0m 189ms
+<-- GET /api/admin/ads
+<-- GET /api/upload/view?key=product%2F0bc43227-1ca7-4a22-b65e-60201b76a55a%2F1781941089594.png
+--> GET /api/upload/view?key=product%2F0bc43227-1ca7-4a22-b65e-60201b76a55a%2F1781941089594.png [32m200[0m 2ms
+--> GET /api/admin/ads [32m200[0m 129ms
+<-- GET /api/notifications
+<-- GET /api/admin/ads/2587e151-ec30-463c-bf18-04aff1b96659/orders
+--> GET /api/admin/ads/2587e151-ec30-463c-bf18-04aff1b96659/orders [33m404[0m 1ms
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 520ms
+<-- GET /api/admin/ads/dc78ab1c-5cd6-4124-95ea-6dab69e76c7c/orders
+--> GET /api/admin/ads/dc78ab1c-5cd6-4124-95ea-6dab69e76c7c/orders [33m404[0m 1ms

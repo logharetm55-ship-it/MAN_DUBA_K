@@ -1,0 +1,317 @@
+
+🚀 مندوبك API يشتغل على: http://localhost:8787
+📦 Endpoints:
+  GET  /api/pricing/calculate
+  POST /api/orders
+  GET  /api/orders/pending
+  POST /api/orders/:id/accept
+  POST /api/couriers/register
+  POST /api/upload-id
+  GET  /api/admin/dashboard
+<-- POST /api/auth/login
+--> POST /api/auth/login [33m400[0m 5ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: PGRST205
+--> GET /api/notifications [32m200[0m 287ms
+<-- POST /api/auth/login
+--> POST /api/auth/login [33m401[0m 285ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [33m401[0m 0ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: PGRST205
+--> GET /api/notifications [32m200[0m 278ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: PGRST205
+--> GET /api/notifications [32m200[0m 235ms
+<-- POST /api/auth/login
+--> POST /api/auth/login [33m401[0m 248ms
+<-- POST /api/auth/login
+--> POST /api/auth/login [33m401[0m 207ms
+<-- POST /api/auth/login
+--> POST /api/auth/login [33m401[0m 202ms
+<-- POST /api/auth/login
+--> POST /api/auth/login [33m401[0m 188ms
+<-- POST /api/auth/login
+--> POST /api/auth/login [33m401[0m 192ms
+<-- POST /api/upload/product
+--> POST /api/upload/product [32m200[0m 7ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: PGRST205
+--> GET /api/notifications [32m200[0m 366ms
+<-- POST /api/admin/ads
+--> POST /api/admin/ads [32m201[0m 329ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: PGRST205
+--> GET /api/notifications [32m200[0m 214ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 214ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: PGRST205
+--> GET /api/notifications [32m200[0m 219ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 268ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: PGRST205
+--> GET /api/notifications [32m200[0m 204ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: PGRST205
+--> GET /api/notifications [32m200[0m 203ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: PGRST205
+--> GET /api/notifications [32m200[0m 216ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: PGRST205
+--> GET /api/notifications [32m200[0m 200ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: PGRST205
+--> GET /api/notifications [32m200[0m 221ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: PGRST205
+--> GET /api/notifications [32m200[0m 230ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 357ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 218ms
+<-- GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228&numShops=1&type=SHOPPING
+--> GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228&numShops=1&type=SHOPPING [32m200[0m 228ms
+<-- POST /api/orders
+--> POST /api/orders [32m201[0m 583ms
+[notifications] DB insert warn: 42501
+[notifications] DB insert warn: 42501
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 248ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 202ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 216ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 240ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 227ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 333ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 247ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 213ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 244ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 292ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 265ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 238ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 246ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 335ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 569ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 245ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 247ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 236ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 232ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 224ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 238ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 284ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 211ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 232ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 229ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 234ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 430ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 264ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 233ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 215ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 241ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 220ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 232ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 256ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 256ms
+<-- POST /api/auth/sync-email-user
+--> POST /api/auth/sync-email-user [32m200[0m 602ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 212ms
+<-- GET /api/orders/pending
+<-- GET /api/orders/my
+--> GET /api/orders/pending [32m200[0m 396ms
+--> GET /api/orders/my [32m200[0m 417ms
+<-- GET /api/orders/pending
+<-- GET /api/orders/my
+--> GET /api/orders/pending [32m200[0m 177ms
+--> GET /api/orders/my [32m200[0m 627ms
+<-- POST /api/orders/8d326778-1af6-4551-923c-fcc4279df330/accept
+--> POST /api/orders/8d326778-1af6-4551-923c-fcc4279df330/accept [33m409[0m 408ms
+<-- GET /api/orders/pending
+--> GET /api/orders/pending [32m200[0m 456ms
+<-- POST /api/orders/8d326778-1af6-4551-923c-fcc4279df330/accept
+--> POST /api/orders/8d326778-1af6-4551-923c-fcc4279df330/accept [33m409[0m 350ms
+<-- PATCH /api/orders/9020665f-58d8-4c33-92cd-0a018d52b755/status
+--> PATCH /api/orders/9020665f-58d8-4c33-92cd-0a018d52b755/status [32m200[0m 612ms
+[notifications] DB insert warn: 42501
+<-- GET /api/notifications
+<-- GET /api/orders/pending
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 174ms
+<-- PATCH /api/orders/9020665f-58d8-4c33-92cd-0a018d52b755/status
+--> GET /api/orders/pending [32m200[0m 368ms
+--> PATCH /api/orders/9020665f-58d8-4c33-92cd-0a018d52b755/status [32m200[0m 896ms
+[notifications] DB insert warn: 42501
+<-- POST /api/notifications/read/7417b108-39ae-438a-9c97-78409f763cc3
+--> POST /api/notifications/read/7417b108-39ae-438a-9c97-78409f763cc3 [32m200[0m 211ms
+<-- POST /api/notifications/read/7417b108-39ae-438a-9c97-78409f763cc3
+--> POST /api/notifications/read/7417b108-39ae-438a-9c97-78409f763cc3 [32m200[0m 241ms
+<-- POST /api/auth/sync-email-user
+--> POST /api/auth/sync-email-user [32m200[0m 596ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 174ms
+<-- POST /api/notifications/read/3315f126-d066-4e44-b4d8-17e92183934a
+--> POST /api/notifications/read/3315f126-d066-4e44-b4d8-17e92183934a [32m200[0m 204ms
+<-- POST /api/notifications/read/3315f126-d066-4e44-b4d8-17e92183934a
+--> POST /api/notifications/read/3315f126-d066-4e44-b4d8-17e92183934a [32m200[0m 215ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 242ms
+<-- GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228&numShops=1&type=SHOPPING
+--> GET /api/pricing/calculate?pickupLat=30.0444&pickupLng=31.2357&deliveryLat=30.0574&deliveryLng=31.2228&numShops=1&type=SHOPPING [32m200[0m 192ms
+<-- POST /api/orders
+--> POST /api/orders [32m201[0m 609ms
+[notifications] DB insert warn: 42501
+[notifications] DB insert warn: 42501
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 212ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 172ms
+<-- POST /api/auth/sync-email-user
+--> POST /api/auth/sync-email-user [32m200[0m 629ms
+<-- GET /api/notifications
+<-- GET /api/orders/pending
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 178ms
+<-- GET /api/orders/my
+--> GET /api/orders/pending [32m200[0m 449ms
+--> GET /api/orders/my [32m200[0m 356ms
+<-- GET /api/orders/pending
+--> GET /api/orders/pending [32m200[0m 208ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 359ms
+<-- POST /api/orders/f1d0b343-2211-453a-9057-c0e7b3bd8d33/accept
+--> POST /api/orders/f1d0b343-2211-453a-9057-c0e7b3bd8d33/accept [32m200[0m 799ms
+[notifications] DB insert warn: 42501
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 395ms
+<-- POST /api/auth/sync-email-user
+--> POST /api/auth/sync-email-user [32m200[0m 548ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 202ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 226ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 193ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 171ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 232ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 218ms
+<-- GET /api/orders/my
+--> GET /api/orders/my [32m200[0m 179ms
+<-- POST /api/auth/sync-email-user
+--> POST /api/auth/sync-email-user [32m200[0m 574ms
+<-- GET /api/notifications
+<-- GET /api/orders/pending
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 174ms
+<-- GET /api/orders/my
+--> GET /api/orders/pending [32m200[0m 433ms
+--> GET /api/orders/my [32m200[0m 370ms
+<-- GET /api/orders/pending
+<-- GET /api/orders/my
+--> GET /api/orders/pending [32m200[0m 172ms
+--> GET /api/orders/my [32m200[0m 363ms
+<-- POST /api/orders/8d326778-1af6-4551-923c-fcc4279df330/accept
+--> POST /api/orders/8d326778-1af6-4551-923c-fcc4279df330/accept [33m409[0m 942ms
+<-- GET /api/orders/pending
+--> GET /api/orders/pending [32m200[0m 512ms
+<-- PATCH /api/orders/f1d0b343-2211-453a-9057-c0e7b3bd8d33/status
+--> PATCH /api/orders/f1d0b343-2211-453a-9057-c0e7b3bd8d33/status [32m200[0m 678ms
+[notifications] DB insert warn: 42501
+<-- GET /api/notifications
+<-- GET /api/orders/pending
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 216ms
+--> GET /api/orders/pending [32m200[0m 405ms
+<-- PATCH /api/orders/f1d0b343-2211-453a-9057-c0e7b3bd8d33/status
+--> PATCH /api/orders/f1d0b343-2211-453a-9057-c0e7b3bd8d33/status [32m200[0m 943ms
+[notifications] DB insert warn: 42501
+<-- POST /api/auth/sync-email-user
+--> POST /api/auth/sync-email-user [32m200[0m 432ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 182ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 381ms
+<-- GET /api/notifications
+[notifications] DB unavailable, using memory store: 42501
+--> GET /api/notifications [32m200[0m 203ms
